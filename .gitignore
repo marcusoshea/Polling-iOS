@@ -88,3 +88,57 @@ fastlane/test_output
 # https://github.com/johnno1962/injectionforxcode
 
 iOSInjectionProject/
+
+# Xcode
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.xcscmblueprint
+*.xcworkspace/xcshareddata/WorkspaceSettings.xcsettings
+
+# Build & Derived Data
+build/
+DerivedData/
+*.ipa
+*.app
+
+# SwiftPM
+.swiftpm
+.build/
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/
+Carthage/Build/
+
+# MCP-generated project
+AEPolling.xcodeproj/
+!AEPolling.xcodeproj/project.xcworkspace/contents.xcworkspacedata
+
+# MCP build artifacts
+.xcodebuild-mcp/.build/
+.xcodebuild-mcp/*.xcodeproj
+.xcodebuild-mcp/*.xcworkspace
+
+# Xcode user settings
+*.xcuserdatad
+*.xcuserdata/
+
+# Misc
+*.DS_Store
+*.orig
+*.swp
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+fastlane/test_output
+
+# Environment files
+.env
+.env.*
+
