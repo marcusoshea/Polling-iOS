@@ -376,7 +376,7 @@ struct PollingMember: Codable, Identifiable {
 }
 
 // MARK: - Candidate Vote (for voting interface)
-struct CandidateVote: Codable, Identifiable {
+struct CandidateVote: Codable, Identifiable, Equatable {
     let id = UUID()
     let candidateId: Int
     let candidateName: String

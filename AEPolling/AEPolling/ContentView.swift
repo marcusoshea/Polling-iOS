@@ -71,7 +71,7 @@ struct MainTabView: View {
                         }
                         .tag(NavigationManager.Tab.feedback)
                 }
-                .accentColor(.appGold)
+                .accentColor(.appPrimary)
                 
                 // Side Menu
                 if navigationManager.showingSideMenu {

@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PollingView: View {
     @StateObject private var viewModel = PollingViewModel()
+    private let userId: Int? = KeychainService.shared.getUserData()?.id
     
     var body: some View {
         NavigationView {
@@ -88,7 +89,7 @@ struct PollingView: View {
                     Spacer()
                 } else {
                     // Active polling content
-                    ActivePollingView(viewModel: viewModel)
+                    ActivePollingView(viewModel: viewModel, userId: userId, pollingOrder: viewModel.currentPollingOrder)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -104,101 +105,191 @@ struct PollingView: View {
 
 struct ActivePollingView: View {
     @ObservedObject var viewModel: PollingViewModel
-    @State private var selectedMember: PollingMember?
+    let userId: Int?
+    let pollingOrder: PollingOrder?
     @State private var showingMemberSelector = false
     @State private var isSubmitting = false
     @State private var showSuccessMessage = false
+    @State private var allPrivate: Bool = false // <-- Add state for checkbox
+    @State private var submitError: String? = nil
+    
+    var isClerkOrAdmin: Bool {
+        guard let pollingOrder, let userId else { return false }
+        return userId == pollingOrder.adminId || userId == pollingOrder.adminAssistantId
+    }
+    
+    var selfMember: PollingMember? {
+        if let userId = userId, let _ = pollingOrder {
+            return viewModel.orderMembers.first(where: { $0.id == userId })
+        }
+        return nil
+    }
     
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                // Polling Header
-                if let polling = viewModel.currentPolling {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(polling.name)
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
-                        
-                        Text("Polling Dates: \(formatDate(polling.startDate)) thru \(formatDate(polling.endDate))")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                }
-                
-                // Member Selection
-                VStack(spacing: 12) {
-                    HStack {
-                        Text("Voting as:")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                        Spacer()
-                        Button(selectedMember?.name ?? "Vote as Self") {
-                            showingMemberSelector = true
+        ZStack(alignment: .bottom) {
+            ScrollView {
+                VStack(spacing: 16) {
+                    // Polling Header
+                    if let polling = viewModel.currentPolling {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(polling.name)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.white)
+                            
+                            Text("Polling Dates: \(formatDate(polling.startDate)) thru \(formatDate(polling.endDate))")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
                         }
-                        .foregroundColor(.appGold)
-                        .font(.subheadline)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 20)
                     }
-                    .padding(.horizontal, 20)
-                }
-                
-                // Candidates List
-                LazyVStack(spacing: 12) {
-                    ForEach(viewModel.candidateVotes) { vote in
-                        CandidateVoteCard(
-                            vote: vote,
-                            onVoteChanged: { newVote in
-                                viewModel.updateVote(for: vote.candidateId, vote: newVote)
-                            },
-                            onNoteChanged: { newNote in
-                                viewModel.updateNote(for: vote.candidateId, note: newNote)
-                            },
-                            onPrivateChanged: { isPrivate in
-                                viewModel.updatePrivate(for: vote.candidateId, isPrivate: isPrivate)
-                            }
-                        )
-                    }
-                }
-                .padding(.horizontal, 20)
-                
-                // Submit Buttons
-                VStack(spacing: 12) {
-                    Button("Submit as Draft") {
-                        Task {
-                            await viewModel.submitVote()
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.appSecondary)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                    .disabled(isSubmitting)
                     
-                    Button("Submit Completed Votes") {
-                        Task {
-                            await viewModel.submitVote()
+                    // Member Selection (only for clerk/admin)
+                    if isClerkOrAdmin {
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Voting as:")
+                                    .font(.headline)
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Button(action: { showingMemberSelector = true }) {
+                                    if let member = viewModel.selectedMember {
+                                        Text(member.name)
+                                            .foregroundColor(.appGold)
+                                            .font(.subheadline)
+                                    } else if let selfMember = selfMember {
+                                        Text("Self (\(selfMember.name))")
+                                            .foregroundColor(.appGold)
+                                            .font(.subheadline)
+                                    } else {
+                                        Text("Self")
+                                            .foregroundColor(.appGold)
+                                            .font(.subheadline)
+                                    }
+                                }
+                            }
+                            .padding(.horizontal, 20)
+                            // Add All Private Checkbox
+                            HStack {
+                                Button(action: {
+                                    allPrivate.toggle()
+                                    viewModel.setAllVotesPrivate(allPrivate)
+                                }) {
+                                    Image(systemName: allPrivate ? "checkmark.square.fill" : "square")
+                                        .foregroundColor(.appGold)
+                                    Text("Mark all responses as private")
+                                        .foregroundColor(.white)
+                                        .font(.subheadline)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                Spacer()
+                            }
+                            .padding(.horizontal, 20)
+                        }
+                        .onAppear {
+                            // Set initial state based on candidateVotes
+                            allPrivate = viewModel.candidateVotes.allSatisfy { $0.isPrivate }
+                        }
+                        .onChange(of: viewModel.candidateVotes) { _, newVotes in
+                            // Keep checkbox in sync if votes change
+                            allPrivate = newVotes.allSatisfy { $0.isPrivate }
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.appSuccess)
-                    .foregroundColor(.white)
-                    .cornerRadius(8)
-                    .disabled(isSubmitting)
+                    
+                    // Candidates List
+                    LazyVStack(spacing: 12) {
+                        ForEach(viewModel.candidateVotes) { vote in
+                            CandidateVoteCard(
+                                vote: vote,
+                                onVoteChanged: { newVote in
+                                    viewModel.updateVote(for: vote.candidateId, vote: newVote)
+                                },
+                                onNoteChanged: { newNote in
+                                    viewModel.updateNote(for: vote.candidateId, note: newNote)
+                                },
+                                onPrivateChanged: { isPrivate in
+                                    viewModel.updatePrivate(for: vote.candidateId, isPrivate: isPrivate)
+                                }
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    
+                    // (Submit buttons moved out of scroll view)
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 20)
             }
         }
+        // Floating Submit Buttons
+        VStack(spacing: 12) {
+            if let error = submitError {
+                Text(error)
+                    .foregroundColor(.appError)
+                    .font(.subheadline)
+                    .multilineTextAlignment(.center)
+                    .padding(.bottom, 4)
+            }
+            if viewModel.candidateVotes.allSatisfy({ $0.completed }) && !viewModel.candidateVotes.isEmpty {
+                Button("Update your submitted Polling Vote") {
+                    // Validate all votes are non-nil
+                    if viewModel.candidateVotes.allSatisfy({ $0.vote != nil }) {
+                        submitError = nil
+                        Task {
+                            await viewModel.submitVote(completed: true)
+                        }
+                    } else {
+                        submitError = "You must select a vote for every candidate before submitting as completed."
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.appGold)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+                .disabled(isSubmitting)
+            } else {
+                Button("Submit as Draft") {
+                    submitError = nil
+                    Task { await viewModel.submitVote(completed: false) }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.appSecondary)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+                .disabled(isSubmitting)
+                Button("Submit Polling Vote") {
+                    // Validate all votes are non-nil
+                    if viewModel.candidateVotes.allSatisfy({ $0.vote != nil }) {
+                        submitError = nil
+                        Task {
+                            await viewModel.submitVote(completed: true)
+                        }
+                    } else {
+                        submitError = "You must select a vote for every candidate before submitting as completed."
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(Color.appSuccess)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+                .disabled(isSubmitting)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 20)
+        .background(
+            Color.appBackground
+                .ignoresSafeArea(edges: .bottom)
+                .opacity(0.95)
+        )
         .sheet(isPresented: $showingMemberSelector) {
             MemberSelectorView(
                 members: viewModel.orderMembers,
-                selectedMember: $selectedMember,
+                selectedMember: $viewModel.selectedMember,
                 onMemberSelected: { member in
-                    selectedMember = member
+                    viewModel.selectedMember = member
                     viewModel.selectMember(member?.id ?? -1)
                     showingMemberSelector = false
                 }
@@ -261,18 +352,25 @@ struct CandidateVoteCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // Candidate Name
-            Text(vote.candidateName)
-                .font(.headline)
-                .fontWeight(.semibold)
-                .foregroundColor(.white)
-            
+            // Candidate Name and Info Icon
+            HStack {
+                Text(vote.candidateName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                Spacer()
+                Button(action: { showingNotesModal = true }) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.appGold)
+                        .font(.title3)
+                }
+                .accessibilityLabel("View all notes for \(vote.candidateName)")
+            }
             // Vote Selection
             VStack(alignment: .leading, spacing: 8) {
                 Text("Vote:")
                     .font(.subheadline)
                     .foregroundColor(.white.opacity(0.8))
-                
                 HStack(spacing: 12) {
                     VoteButton(title: "Yes", value: 1, isSelected: selectedVote == 1) {
                         selectedVote = selectedVote == 1 ? nil : 1
@@ -292,29 +390,16 @@ struct CandidateVoteCard: View {
                     }
                 }
             }
-            
-            // Note Section
+            // Note Section (no View All Notes button)
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Notes:")
-                        .font(.subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-                    
-                    Spacer()
-                    
-                    Button("View All Notes") {
-                        showingNotesModal = true
-                    }
-                    .font(.caption)
-                    .foregroundColor(.appGold)
-                    
+                  
                     Toggle("Private", isOn: $isPrivate)
                         .toggleStyle(SwitchToggleStyle(tint: .appGold))
                         .onChange(of: isPrivate) { _, newValue in
                             onPrivateChanged(newValue)
                         }
                 }
-                
                 TextField("Add your notes here...", text: $note, axis: .vertical)
                     .textFieldStyle(RoundedBorderTextFieldStyle())
                     .onChange(of: note) { _, newValue in
@@ -328,6 +413,11 @@ struct CandidateVoteCard: View {
         .cornerRadius(12)
         .sheet(isPresented: $showingNotesModal) {
             CandidateNotesModal(candidateId: vote.candidateId, candidateName: vote.candidateName)
+        }
+        .onChange(of: vote.isPrivate) { newValue in
+            if isPrivate != newValue {
+                isPrivate = newValue
+            }
         }
     }
 }
@@ -592,6 +682,7 @@ class PollingViewModel: ObservableObject {
     @Published var pollingList: [Polling] = []
     @Published var errorMessage: String?
     @Published var currentPolling: Polling?
+    @Published var currentPollingOrder: PollingOrder? // Add this
     @Published var pollingOrderName: String = ""
     @Published var candidateVotes: [CandidateVote] = []
     @Published var orderMembers: [PollingMember] = []
@@ -614,6 +705,13 @@ class PollingViewModel: ObservableObject {
                 isLoading = false
                 return
             }
+            // Fetch and set currentPollingOrder
+            let pollingOrders = try await apiService.fetchPollingOrders()
+            if let order = pollingOrders.first(where: { $0.id == pollingOrderId }) {
+                currentPollingOrder = order
+            } else {
+                currentPollingOrder = nil
+            }
             currentPolling = try await apiService.getCurrentPolling(orderId: pollingOrderId)
             if let polling = currentPolling {
                 let allMembers = try await apiService.getAllMembers(orderId: pollingOrderId)
@@ -626,7 +724,7 @@ class PollingViewModel: ObservableObject {
                         candidateName: summary.name,
                         note: summary.note ?? "",
                         vote: summary.vote,
-                        isPrivate: summary.isPrivate ?? false,
+                        isPrivate: summary.isPrivate,
                         pollingNotesId: (summary.pollingNotesId != nil && summary.pollingNotesId != 0) ? summary.pollingNotesId : nil,
                         completed: summary.completed
                     )
@@ -663,12 +761,11 @@ class PollingViewModel: ObservableObject {
             candidateVotes[index].isPrivate = isPrivate
         }
     }
-    func submitVote() async {
+    func submitVote(completed: Bool) async {
         isLoading = true
         defer { isLoading = false }
         guard let currentUser = keychainService.getUserData(), let polling = currentPolling else { return }
         let memberId = selectedMember?.id ?? currentUser.id
-        let now = ISO8601DateFormatter().string(from: Date())
         let noteRequests = candidateVotes.map { vote in
             PollingNoteRequest(
                 pollingId: polling.id,
@@ -686,7 +783,7 @@ class PollingViewModel: ObservableObject {
                 vote: vote.vote,
                 pnCreatedAt: nil, // Set if available
                 pollingOrderMemberId: memberId,
-                completed: vote.completed,
+                completed: completed, // <-- use parameter
                 isPrivate: vote.isPrivate,
                 authToken: (memberId == currentUser.id) ? keychainService.getAuthToken() : nil
             )
@@ -706,6 +803,14 @@ class PollingViewModel: ObservableObject {
         }
     }
     func loadPollingData() async { await loadCurrentPollingData() }
+    
+    func setAllVotesPrivate(_ isPrivate: Bool) {
+        candidateVotes = candidateVotes.map { vote in
+            var updatedVote = vote
+            updatedVote.isPrivate = isPrivate
+            return updatedVote
+        }
+    }
 }
 
 #Preview {

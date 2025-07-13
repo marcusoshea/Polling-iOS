@@ -25,7 +25,7 @@ struct ReportView: View {
             .sheet(isPresented: $showingOrderPicker) {
                 OrderPickerView(selectedOrder: $selectedOrder, orders: viewModel.pollingOrders)
             }
-            .onChange(of: selectedOrder) { _ in
+            .onChange(of: selectedOrder) {
                 if let order = selectedOrder {
                     Task {
                         await viewModel.loadReportData(for: order.id)
@@ -124,7 +124,7 @@ struct ReportView: View {
                 .cornerRadius(16)
                 .padding(.horizontal, 20)
                 // Summary Cards
-                if let summary = viewModel.pollingSummary {
+                if viewModel.pollingSummary != nil {
                     VStack(spacing: 16) {
                         SummaryCard(
                             title: "Total Polling",
