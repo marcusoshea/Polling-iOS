@@ -76,16 +76,45 @@ struct CandidatesView: View {
                     .padding(.horizontal, 40)
                     Spacer()
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 16) {
-                            ForEach(viewModel.candidates) { candidate in
-                                CandidateCard(candidate: candidate) {
-                                    selectedCandidate = candidate
-                                    showingCandidateDetail = true
+                    ScrollView(.vertical, showsIndicators: false) {
+                        VStack(spacing: 0) {
+                            // Single card for all candidates
+                            VStack(spacing: 16) {
+                                ForEach(viewModel.candidates) { candidate in
+                                    Button(action: {
+                                        selectedCandidate = candidate
+                                        showingCandidateDetail = true
+                                    }) {
+                                        HStack {
+                                            Text(candidate.name)
+                                                .font(.headline)
+                                                .fontWeight(.semibold)
+                                                .foregroundColor(.appText)
+                                            if candidate.watchList == true {
+                                                Text(" Watchlist")
+                                                    .font(.caption)
+                                                    .fontWeight(.medium)
+                                                    .foregroundColor(.appGold)
+                                            }
+                                            Spacer()
+                                            Image(systemName: "chevron.right")
+                                                .font(.caption)
+                                                .foregroundColor(.appText.opacity(0.6))
+                                        }
+                                        .padding(.vertical, 12)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                    if candidate.id != viewModel.candidates.last?.id {
+                                        Divider()
+                                    }
                                 }
                             }
+                            .padding(16)
+                            .background(Color.appCardBackground)
+                            .cornerRadius(12)
+                            .padding(.horizontal, 20)
+                            .frame(maxWidth: .infinity)
                         }
-                        .padding(.horizontal, 20)
                         .padding(.vertical, 16)
                     }
                 }
@@ -123,76 +152,7 @@ struct CandidatesView: View {
     }
 }
 
-struct CandidateCard: View {
-    let candidate: Candidate
-    let onTap: () -> Void
-    
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(candidate.name)
-                            .font(.headline)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.appText)
-                        
-                        Text("Status: \(candidate.watchList != nil ? "On Watchlist" : "Not on Watchlist")")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(statusColor.opacity(0.2))
-                            .foregroundColor(statusColor)
-                            .cornerRadius(6)
-                        
-                        Text("ID: \(candidate.id)")
-                            .font(.caption)
-                            .foregroundColor(.appText.opacity(0.6))
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("Status: \(candidate.watchList != nil ? "On Watchlist" : "Not on Watchlist")")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(statusColor.opacity(0.2))
-                            .foregroundColor(statusColor)
-                            .cornerRadius(6)
-                        
-                        Text("ID: \(candidate.id)")
-                            .font(.caption)
-                            .foregroundColor(.appText.opacity(0.6))
-                    }
-                }
-                
-                HStack {
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.appText.opacity(0.6))
-                }
-            }
-            .padding(16)
-            .background(Color.appCardBackground)
-            .cornerRadius(12)
-        }
-        .buttonStyle(PlainButtonStyle())
-    }
-    
-    private var statusColor: Color {
-        switch candidate.watchList != nil ? "On Watchlist" : "Not on Watchlist" {
-        case "On Watchlist":
-            return .appSuccess
-        case "Not on Watchlist":
-            return .appGold
-        default:
-            return .appText
-        }
-    }
-}
+// CandidateCard removed; now all candidates are on a single card
 
 struct CandidateDetailView: View {
     let candidate: Candidate
@@ -499,7 +459,14 @@ class CandidatesViewModel: ObservableObject {
         errorMessage = nil
         
         do {
-            candidates = try await apiService.fetchCandidates()
+            // Get polling order ID from user
+            let user = KeychainService.shared.getUserData()
+            guard let orderId = user?.pollingOrderId else {
+                errorMessage = "Polling order ID not found. Please log in again."
+                isLoading = false
+                return
+            }
+            candidates = try await apiService.getAllCandidates(orderId: orderId)
         } catch {
             errorMessage = error.localizedDescription
         }
