@@ -278,14 +278,16 @@ struct CandidateVoteCard: View {
                         selectedVote = selectedVote == 1 ? nil : 1
                         onVoteChanged(selectedVote)
                     }
-                    
-                    VoteButton(title: "No", value: -1, isSelected: selectedVote == -1) {
-                        selectedVote = selectedVote == -1 ? nil : -1
+                    VoteButton(title: "Wait", value: 2, isSelected: selectedVote == 2) {
+                        selectedVote = selectedVote == 2 ? nil : 2
                         onVoteChanged(selectedVote)
                     }
-                    
-                    VoteButton(title: "Abstain", value: 0, isSelected: selectedVote == 0) {
-                        selectedVote = selectedVote == 0 ? nil : 0
+                    VoteButton(title: "No", value: 3, isSelected: selectedVote == 3) {
+                        selectedVote = selectedVote == 3 ? nil : 3
+                        onVoteChanged(selectedVote)
+                    }
+                    VoteButton(title: "Abstain", value: 4, isSelected: selectedVote == 4) {
+                        selectedVote = selectedVote == 4 ? nil : 4
                         onVoteChanged(selectedVote)
                     }
                 }
@@ -670,27 +672,37 @@ class PollingViewModel: ObservableObject {
         let noteRequests = candidateVotes.map { vote in
             PollingNoteRequest(
                 pollingId: polling.id,
-                candidateId: vote.candidateId,
-                pollingCandidateId: nil, // Set if needed
-                name: vote.candidateName,
+                pollingName: polling.name,
+                startDate: polling.startDate,
+                endDate: polling.endDate,
                 pollingOrderId: polling.pollingOrderId,
-                link: "",
-                watchList: false,
-                pollingNotesId: (vote.pollingNotesId != nil && vote.pollingNotesId != 0) ? vote.pollingNotesId : nil,
+                candidateId: vote.candidateId,
+                pollingCandidateId: vote.pollingNotesId, // Use correct field if available
+                name: vote.candidateName,
+                link: "", // No link in CandidateVote, use empty string
+                watchList: false, // No watchList in CandidateVote, use false
+                pollingNotesId: vote.pollingNotesId,
                 note: vote.note,
                 vote: vote.vote,
-                pnCreatedAt: now,
+                pnCreatedAt: nil, // Set if available
                 pollingOrderMemberId: memberId,
                 completed: vote.completed,
                 isPrivate: vote.isPrivate,
-                authToken: keychainService.getAuthToken()
+                authToken: (memberId == currentUser.id) ? keychainService.getAuthToken() : nil
             )
+        }
+        // Log the payload as JSON
+        if let jsonData = try? JSONEncoder().encode(noteRequests),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            print("Submitting PollingNoteRequest payload:\n\(jsonString)")
+        } else {
+            print("Failed to encode PollingNoteRequest payload.")
         }
         do {
             let success = try await apiService.createPollingNotes(notes: noteRequests)
             if !success { errorMessage = "Failed to submit votes. Please try again." }
         } catch {
-            errorMessage = "Error submitting votes: \(error.localizedDescription)"
+            errorMessage = error.localizedDescription
         }
     }
     func loadPollingData() async { await loadCurrentPollingData() }

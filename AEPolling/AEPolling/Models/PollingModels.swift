@@ -155,27 +155,33 @@ struct PollingNote: Codable, Identifiable {
 // MARK: - Polling Note Request
 struct PollingNoteRequest: Codable {
     let pollingId: Int
+    let pollingName: String
+    let startDate: String
+    let endDate: String
+    let pollingOrderId: Int
     let candidateId: Int
     let pollingCandidateId: Int?
     let name: String
-    let pollingOrderId: Int
     let link: String
     let watchList: Bool
     let pollingNotesId: Int?
     let note: String?
     let vote: Int?
-    let pnCreatedAt: String
-    let pollingOrderMemberId: Int
+    let pnCreatedAt: String?
+    let pollingOrderMemberId: Int?
     let completed: Bool
     let isPrivate: Bool
     let authToken: String?
-    
+
     enum CodingKeys: String, CodingKey {
         case pollingId = "polling_id"
+        case pollingName = "polling_name"
+        case startDate = "start_date"
+        case endDate = "end_date"
+        case pollingOrderId = "polling_order_id"
         case candidateId = "candidate_id"
         case pollingCandidateId = "polling_candidate_id"
         case name
-        case pollingOrderId = "polling_order_id"
         case link
         case watchList = "watch_list"
         case pollingNotesId = "polling_notes_id"
@@ -192,9 +198,9 @@ struct PollingNoteRequest: Codable {
 // MARK: - Polling Summary
 struct PollingSummary: Codable {
     let pollingId: Int
-    let pollingName: String
-    let startDate: String
-    let endDate: String
+    let pollingName: String? // Made optional
+    let startDate: String?   // Made optional
+    let endDate: String?     // Made optional
     let pollingOrderId: Int
     let candidateId: Int
     let pollingCandidateId: Int
