@@ -270,12 +270,24 @@ struct PollingReport: Codable {
 
 // MARK: - Candidate Images
 struct CandidateImages: Codable {
-    let candidateId: String
-    let images: [String]
+    let candidateId: Int
+    let name: String
+    let pollingOrderId: Int
+    let link: String
+    let watchList: Bool
+    let imageId: Int
+    let imageDescription: String
+    let awsKey: String
     
     enum CodingKeys: String, CodingKey {
         case candidateId = "candidate_id"
-        case images
+        case name
+        case pollingOrderId = "polling_order_id"
+        case link
+        case watchList = "watch_list"
+        case imageId = "image_id"
+        case imageDescription = "image_description"
+        case awsKey = "aws_key"
     }
 }
 

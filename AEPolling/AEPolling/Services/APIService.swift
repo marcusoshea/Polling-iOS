@@ -131,7 +131,7 @@ class APIService {
         return try await get(endpoint: "/candidate/\(candidateId)")
     }
     
-    func getCandidateImages(candidateId: String) async throws -> CandidateImages {
+    func getCandidateImages(candidateId: String) async throws -> [CandidateImages] {
         return try await get(endpoint: "/candidate/candidateImages/\(candidateId)")
     }
     

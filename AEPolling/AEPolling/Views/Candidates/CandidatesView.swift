@@ -9,114 +9,19 @@ import SwiftUI
 
 struct CandidatesView: View {
     @StateObject private var viewModel = CandidatesViewModel()
-    @State private var selectedCandidate: Candidate?
     @State private var showingCandidateDetail = false
     
     var body: some View {
         NavigationView {
             VStack {
                 if viewModel.isLoading {
-                    Spacer()
-                    VStack(spacing: 16) {
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .tint(.white)
-                        Text("Loading candidates...")
-                            .font(.subheadline)
-                            .foregroundColor(.white.opacity(0.8))
-                    }
-                    Spacer()
+                    loadingView
                 } else if let errorMessage = viewModel.errorMessage {
-                    Spacer()
-                    VStack(spacing: 16) {
-                        Image(systemName: "exclamationmark.triangle")
-                            .font(.system(size: 50))
-                            .foregroundColor(.appError)
-                        
-                        Text("Error")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                        
-                        Text(errorMessage)
-                            .font(.body)
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                        
-                        Button("Retry") {
-                            Task {
-                                await viewModel.loadCandidates()
-                            }
-                        }
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 12)
-                        .background(Color.appSecondary)
-                        .foregroundColor(.white)
-                        .cornerRadius(8)
-                    }
-                    .padding(.horizontal, 40)
-                    Spacer()
+                    errorView(errorMessage)
                 } else if viewModel.candidates.isEmpty {
-                    Spacer()
-                    VStack(spacing: 16) {
-                        Image(systemName: "person.2")
-                            .font(.system(size: 50))
-                            .foregroundColor(.appGold)
-                        
-                        Text("No Candidates")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.white)
-                        
-                        Text("There are no candidates available at this time.")
-                            .font(.body)
-                            .foregroundColor(.white.opacity(0.8))
-                            .multilineTextAlignment(.center)
-                    }
-                    .padding(.horizontal, 40)
-                    Spacer()
+                    emptyView
                 } else {
-                    ScrollView(.vertical, showsIndicators: false) {
-                        VStack(spacing: 0) {
-                            // Single card for all candidates
-                            VStack(spacing: 16) {
-                                ForEach(viewModel.candidates) { candidate in
-                                    Button(action: {
-                                        selectedCandidate = candidate
-                                        showingCandidateDetail = true
-                                    }) {
-                                        HStack {
-                                            Text(candidate.name)
-                                                .font(.headline)
-                                                .fontWeight(.semibold)
-                                                .foregroundColor(.appText)
-                                            if candidate.watchList == true {
-                                                Text(" Watchlist")
-                                                    .font(.caption)
-                                                    .fontWeight(.medium)
-                                                    .foregroundColor(.appGold)
-                                            }
-                                            Spacer()
-                                            Image(systemName: "chevron.right")
-                                                .font(.caption)
-                                                .foregroundColor(.appText.opacity(0.6))
-                                        }
-                                        .padding(.vertical, 12)
-                                    }
-                                    .buttonStyle(PlainButtonStyle())
-                                    if candidate.id != viewModel.candidates.last?.id {
-                                        Divider()
-                                    }
-                                }
-                            }
-                            .padding(16)
-                            .background(Color.appCardBackground)
-                            .cornerRadius(12)
-                            .padding(.horizontal, 20)
-                            .frame(maxWidth: .infinity)
-                        }
-                        .padding(.vertical, 16)
-                    }
+                    candidatesListView
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -124,7 +29,152 @@ struct CandidatesView: View {
             .navigationTitle("Candidates")
             .navigationBarTitleDisplayMode(.inline)
             .sheet(isPresented: $showingCandidateDetail) {
-                if let candidate = selectedCandidate {
+                candidateDetailSheet
+            }
+            .task {
+                await viewModel.loadCandidates()
+            }
+        }
+    }
+    
+    private var loadingView: some View {
+        VStack {
+            Spacer()
+            VStack(spacing: 16) {
+                ProgressView()
+                    .scaleEffect(1.2)
+                    .tint(.white)
+                Text("Loading candidates...")
+                    .font(.subheadline)
+                    .foregroundColor(.white.opacity(0.8))
+            }
+            Spacer()
+        }
+    }
+    
+    private func errorView(_ errorMessage: String) -> some View {
+        VStack {
+            Spacer()
+            VStack(spacing: 16) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 50))
+                    .foregroundColor(.appError)
+                
+                Text("Error")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                
+                Text(errorMessage)
+                    .font(.body)
+                    .foregroundColor(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+                
+                Button("Retry") {
+                    Task {
+                        await viewModel.loadCandidates()
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 12)
+                .background(Color.appSecondary)
+                .foregroundColor(.white)
+                .cornerRadius(8)
+            }
+            .padding(.horizontal, 40)
+            Spacer()
+        }
+    }
+    
+    private var emptyView: some View {
+        VStack {
+            Spacer()
+            VStack(spacing: 16) {
+                Image(systemName: "person.2")
+                    .font(.system(size: 50))
+                    .foregroundColor(.appGold)
+                
+                Text("No Candidates")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.white)
+                
+                Text("There are no candidates available at this time.")
+                    .font(.body)
+                    .foregroundColor(.white.opacity(0.8))
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 40)
+            Spacer()
+        }
+    }
+    
+    private var candidatesListView: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: 0) {
+                VStack(spacing: 16) {
+                    ForEach(viewModel.candidates) { candidate in
+                        Button(action: {
+                            showingCandidateDetail = true
+                            Task {
+                                await viewModel.loadCandidateDetails(for: candidate)
+                            }
+                        }) {
+                            HStack {
+                                Text(candidate.name)
+                                    .font(.headline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.appText)
+                                if candidate.watchList == true {
+                                    Text(" Watchlist")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.appGold)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.caption)
+                                    .foregroundColor(.appText.opacity(0.6))
+                            }
+                            .padding(.vertical, 12)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        if candidate.id != viewModel.candidates.last?.id {
+                            Divider()
+                        }
+                    }
+                }
+                .padding(16)
+                .background(Color.appCardBackground)
+                .cornerRadius(12)
+                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity)
+            }
+            .padding(.vertical, 16)
+        }
+    }
+    
+    private var candidateDetailSheet: some View {
+        if let candidate = viewModel.selectedCandidate {
+            if viewModel.isLoading {
+                return AnyView(
+                    VStack {
+                        Spacer()
+                        VStack(spacing: 16) {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                                .tint(.white)
+                            Text("Loading candidate details...")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                        Spacer()
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Color.appBackground)
+                )
+            } else {
+                return AnyView(
                     CandidateDetailView(
                         candidate: candidate,
                         pollingNotes: viewModel.pollingNotes,
@@ -137,17 +187,20 @@ struct CandidatesView: View {
                         showExternalNotes: viewModel.showExternalNotes,
                         onNewNoteTextChange: { viewModel.updateNewNoteText($0) },
                         onPrivateNoteToggle: { viewModel.toggleIsPrivateNote() },
-                        onAddNote: { viewModel.addExternalNote() },
-                        onDeleteNote: { viewModel.deleteExternalNote($0) },
+                        onAddNote: {
+                            Task { await viewModel.addExternalNote() }
+                        },
+                        onDeleteNote: { note in
+                            Task { await viewModel.deleteExternalNote(note) }
+                        },
                         onTogglePollingNotes: { viewModel.togglePollingNotesExpanded() },
                         onToggleExternalNotes: { viewModel.toggleExternalNotesExpanded() },
                         onToggleWatchlist: { viewModel.toggleCandidateWatchlist($0) }
                     )
-                }
+                )
             }
-            .task {
-                await viewModel.loadCandidates()
-            }
+        } else {
+            return AnyView(EmptyView())
         }
     }
 }
@@ -172,6 +225,9 @@ struct CandidateDetailView: View {
     let onToggleExternalNotes: () -> Void
     let onToggleWatchlist: (Candidate) -> Void
     
+    @State private var selectedImage: CandidateImage?
+    @State private var showingFullScreenImage = false
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -187,6 +243,12 @@ struct CandidateDetailView: View {
                 }
             }
             .padding(.horizontal, 20)
+        }
+        .background(Color.appBackground)
+        .sheet(isPresented: $showingFullScreenImage) {
+            if let selectedImage = selectedImage {
+                FullScreenImageView(image: selectedImage)
+            }
         }
     }
     
@@ -341,10 +403,15 @@ struct CandidateDetailView: View {
                         AsyncImage(url: URL(string: image.imageUrl)) { phase in
                             switch phase {
                             case .empty:
-                                ProgressView()
-                                    .frame(width: 100, height: 100)
-                                    .background(Color.gray.opacity(0.3))
-                                    .cornerRadius(8)
+                                VStack {
+                                    ProgressView()
+                                        .frame(width: 100, height: 100)
+                                        .background(Color.gray.opacity(0.3))
+                                        .cornerRadius(8)
+                                    Text("Loading...")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
                             case .success(let image):
                                 image
                                     .resizable()
@@ -353,16 +420,32 @@ struct CandidateDetailView: View {
                                     .clipped()
                                     .cornerRadius(8)
                             case .failure:
-                                Image(systemName: "photo")
-                                    .font(.system(size: 40))
-                                    .foregroundColor(.gray)
-                                    .frame(width: 100, height: 100)
-                                    .background(Color.gray.opacity(0.3))
-                                    .cornerRadius(8)
+                                VStack {
+                                    Image(systemName: "photo")
+                                        .font(.system(size: 40))
+                                        .foregroundColor(.gray)
+                                        .frame(width: 100, height: 100)
+                                        .background(Color.gray.opacity(0.3))
+                                        .cornerRadius(8)
+                                    Text("Failed to load")
+                                        .font(.caption)
+                                        .foregroundColor(.gray)
+                                }
                             @unknown default:
                                 EmptyView()
                             }
                         }
+                        .onTapGesture {
+                            print("🖼️ Image tapped: \(image.imageUrl)")
+                            selectedImage = image
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                showingFullScreenImage = true
+                            }
+                        }
+                        .onAppear {
+                            print("🖼️ Attempting to load image: \(image.imageUrl)")
+                        }
+
                     }
                 }
                 .padding(.horizontal, 4)
@@ -436,11 +519,75 @@ struct ExternalNoteCard: View {
     }
 }
 
+struct FullScreenImageView: View {
+    let image: CandidateImage
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+                
+                AsyncImage(url: URL(string: image.imageUrl)) { phase in
+                    switch phase {
+                    case .empty:
+                        VStack {
+                            ProgressView()
+                                .scaleEffect(1.5)
+                                .tint(.white)
+                            Text("Loading image...")
+                                .font(.subheadline)
+                                .foregroundColor(.white.opacity(0.8))
+                        }
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .padding()
+                    case .failure(let error):
+                        VStack {
+                            Image(systemName: "photo")
+                                .font(.system(size: 60))
+                                .foregroundColor(.gray)
+                            Text("Failed to load image")
+                                .font(.subheadline)
+                                .foregroundColor(.gray)
+                            Text(error.localizedDescription)
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .padding(.top, 4)
+                        }
+                    @unknown default:
+                        EmptyView()
+                    }
+                }
+            }
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarBackButtonHidden(true)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                    .foregroundColor(.white)
+                }
+            }
+        }
+        .navigationViewStyle(StackNavigationViewStyle())
+        .onAppear {
+            print("🖼️ FullScreen: View appeared for image: \(image.imageUrl)")
+        }
+    }
+}
+
 @MainActor
 class CandidatesViewModel: ObservableObject {
     @Published var candidates: [Candidate] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var selectedCandidate: Candidate?
     
     // Properties for CandidateDetailView
     @Published var pollingNotes: [PollingNote] = []
@@ -474,6 +621,44 @@ class CandidatesViewModel: ObservableObject {
         isLoading = false
     }
     
+    // Load candidate details when a candidate is selected
+    func loadCandidateDetails(for candidate: Candidate) async {
+        selectedCandidate = candidate
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            async let pollingNotesTask = apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
+            async let externalNotesTask = apiService.getExternalNoteByCandidateId(candidateId: candidate.id)
+            async let candidateImagesTask = apiService.getCandidateImages(candidateId: String(candidate.id))
+            
+            let (polling, external, images) = try await (pollingNotesTask, externalNotesTask, candidateImagesTask)
+            pollingNotes = polling
+            externalNotes = external
+            
+            // Convert CandidateImages array to CandidateImage array for UI
+            candidateImages = images.map { image in
+                let imageUrl = "https://s3.us-east-2.amazonaws.com/polling.aethelmearc.org/\(image.awsKey)"
+                print("🖼️ Generated image URL: \(imageUrl)")
+                return CandidateImage(
+                    id: image.imageId,
+                    candidateId: image.candidateId,
+                    imageUrl: imageUrl
+                )
+            }
+            
+            // Reset UI state for new candidate
+            newNoteText = ""
+            isPrivateNote = false
+            showPollingNotes = false
+            showExternalNotes = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        
+        isLoading = false
+    }
+    
     // Methods for CandidateDetailView
     func updateNewNoteText(_ text: String) {
         newNoteText = text
@@ -483,34 +668,40 @@ class CandidatesViewModel: ObservableObject {
         isPrivateNote.toggle()
     }
     
-    func addExternalNote() {
+    func addExternalNote() async {
         guard !newNoteText.isEmpty else { return }
         
-        // Create a mock PollingOrderMember for the new note
-        let mockMember = PollingOrderMember(
-            id: -1,
-            name: "Current User",
-            email: "",
-            approved: true,
-            removed: false,
-            active: true
-        )
+        guard let selectedCandidate = selectedCandidate else {
+            errorMessage = "No candidate selected"
+            return
+        }
         
-        let newNote = ExternalNote(
-            id: -1, // Use -1 for new notes, should be replaced by real id from backend
-            candidateId: -1,
-            pollingOrderMemberId: mockMember,
-            text: newNoteText,
-            timestamp: ISO8601DateFormatter().string(from: Date())
-        )
-        
-        externalNotes.append(newNote)
-        newNoteText = ""
-        isPrivateNote = false
+        do {
+            try await apiService.createExternalNote(candidateId: selectedCandidate.id, note: newNoteText)
+            
+            // Reload external notes to get the updated list
+            let updatedNotes = try await apiService.getExternalNoteByCandidateId(candidateId: selectedCandidate.id)
+            externalNotes = updatedNotes
+            
+            newNoteText = ""
+            isPrivateNote = false
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
     
-    func deleteExternalNote(_ note: ExternalNote) {
-        externalNotes.removeAll { $0.id == note.id }
+    func deleteExternalNote(_ note: ExternalNote) async {
+        do {
+            try await apiService.removeExternalNote(externalNoteId: note.id)
+            
+            // Reload external notes to get the updated list
+            if let selectedCandidate = selectedCandidate {
+                let updatedNotes = try await apiService.getExternalNoteByCandidateId(candidateId: selectedCandidate.id)
+                externalNotes = updatedNotes
+            }
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
     
     func togglePollingNotesExpanded() {
