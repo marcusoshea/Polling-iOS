@@ -227,6 +227,7 @@ struct CandidateDetailView: View {
     
     @State private var selectedImage: CandidateImage?
     @State private var showingFullScreenImage = false
+    @State private var shouldPresentSheet = false
     
     var body: some View {
         ScrollView {
@@ -245,9 +246,15 @@ struct CandidateDetailView: View {
             .padding(.horizontal, 20)
         }
         .background(Color.appBackground)
-        .sheet(isPresented: $showingFullScreenImage) {
+        .sheet(isPresented: $shouldPresentSheet) {
             if let selectedImage = selectedImage {
                 FullScreenImageView(image: selectedImage)
+            }
+        }
+        .onChange(of: shouldPresentSheet) { newValue in
+            if !newValue {
+                // Sheet was dismissed, reset the selected image
+                selectedImage = nil
             }
         }
     }
@@ -438,8 +445,8 @@ struct CandidateDetailView: View {
                         .onTapGesture {
                             print("🖼️ Image tapped: \(image.imageUrl)")
                             selectedImage = image
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                                showingFullScreenImage = true
+                            DispatchQueue.main.async {
+                                shouldPresentSheet = true
                             }
                         }
                         .onAppear {
@@ -524,58 +531,57 @@ struct FullScreenImageView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationView {
-            ZStack {
-                Color.black
-                    .ignoresSafeArea()
+        VStack {
+            HStack {
+                Button("Done") {
+                    dismiss()
+                }
+                .foregroundColor(.white)
+                .padding()
                 
-                AsyncImage(url: URL(string: image.imageUrl)) { phase in
-                    switch phase {
-                    case .empty:
-                        VStack {
-                            ProgressView()
-                                .scaleEffect(1.5)
-                                .tint(.white)
-                            Text("Loading image...")
-                                .font(.subheadline)
-                                .foregroundColor(.white.opacity(0.8))
-                        }
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .padding()
-                    case .failure(let error):
-                        VStack {
-                            Image(systemName: "photo")
-                                .font(.system(size: 60))
-                                .foregroundColor(.gray)
-                            Text("Failed to load image")
-                                .font(.subheadline)
-                                .foregroundColor(.gray)
-                            Text(error.localizedDescription)
-                                .font(.caption)
-                                .foregroundColor(.gray)
-                                .padding(.top, 4)
-                        }
-                    @unknown default:
-                        EmptyView()
+                Spacer()
+            }
+            
+            Spacer()
+            
+            AsyncImage(url: URL(string: image.imageUrl)) { phase in
+                switch phase {
+                case .empty:
+                    VStack {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
+                        Text("Loading image...")
+                            .font(.subheadline)
+                            .foregroundColor(.white.opacity(0.8))
                     }
+                case .success(let image):
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .padding()
+                case .failure(let error):
+                    VStack {
+                        Image(systemName: "photo")
+                            .font(.system(size: 60))
+                            .foregroundColor(.gray)
+                        Text("Failed to load image")
+                            .font(.subheadline)
+                            .foregroundColor(.gray)
+                        Text(error.localizedDescription)
+                            .font(.caption)
+                            .foregroundColor(.gray)
+                            .padding(.top, 4)
+                    }
+                @unknown default:
+                    EmptyView()
                 }
             }
-            .navigationBarTitleDisplayMode(.inline)
-            .navigationBarBackButtonHidden(true)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Done") {
-                        dismiss()
-                    }
-                    .foregroundColor(.white)
-                }
-            }
+            
+            Spacer()
         }
-        .navigationViewStyle(StackNavigationViewStyle())
+        .background(Color.black)
         .onAppear {
             print("🖼️ FullScreen: View appeared for image: \(image.imageUrl)")
         }
