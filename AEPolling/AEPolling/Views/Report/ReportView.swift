@@ -10,8 +10,6 @@ import Charts
 
 struct ReportView: View {
     @StateObject private var viewModel = ReportViewModel()
-    @State private var selectedOrder: PollingOrder?
-    @State private var showingOrderPicker = false
     
     var body: some View {
         NavigationView {
@@ -22,18 +20,8 @@ struct ReportView: View {
             .background(Color.appBackground)
             .navigationTitle("Reports")
             .navigationBarTitleDisplayMode(.inline)
-            .sheet(isPresented: $showingOrderPicker) {
-                OrderPickerView(selectedOrder: $selectedOrder, orders: viewModel.pollingOrders)
-            }
-            .onChange(of: selectedOrder) {
-                if let order = selectedOrder {
-                    Task {
-                        await viewModel.loadReportData(for: order.id)
-                    }
-                }
-            }
             .task {
-                await viewModel.loadReportData()
+                await viewModel.loadInitialReportData()
             }
         }
     }
@@ -81,7 +69,7 @@ struct ReportView: View {
                     .multilineTextAlignment(.center)
                 Button("Retry") {
                     Task {
-                        await viewModel.loadReportData()
+                        await viewModel.loadInitialReportData()
                     }
                 }
                 .padding(.horizontal, 24)
@@ -98,72 +86,83 @@ struct ReportView: View {
     private var reportScrollView: some View {
         ScrollView {
             VStack(spacing: 20) {
-                // Order Selection Card
-                VStack(alignment: .leading, spacing: 12) {
-                    Text("Select Polling Order")
-                        .font(.headline)
-                        .foregroundColor(.appText)
-                    Button(action: {
-                        showingOrderPicker = true
-                    }) {
-                        HStack {
-                            Text(selectedOrder?.name ?? "Choose a polling order")
-                                .foregroundColor(selectedOrder == nil ? .appText.opacity(0.6) : .appText)
-                            Spacer()
-                            Image(systemName: "chevron.down")
-                                .foregroundColor(.appText.opacity(0.6))
-                                .font(.caption)
+                // Toggle at the top
+                if viewModel.inProcessAvailable || viewModel.closedAvailable {
+                    HStack {
+                        if viewModel.closedAvailable {
+                            Button(action: {
+                                Task { await viewModel.toggleReport() }
+                            }) {
+                                Text("Closed Report")
+                                    .fontWeight(!viewModel.showingInProcess ? .bold : .regular)
+                                    .foregroundColor(!viewModel.showingInProcess ? .appPrimary : .appText)
+                            }
                         }
-                        .padding()
-                        .background(Color.appBackground)
-                        .cornerRadius(8)
+                        if viewModel.inProcessAvailable {
+                            Button(action: {
+                                Task { await viewModel.toggleReport() }
+                            }) {
+                                Text("In-Process")
+                                    .fontWeight(viewModel.showingInProcess ? .bold : .regular)
+                                    .foregroundColor(viewModel.showingInProcess ? .appPrimary : .appText)
+                            }
+                        }
                     }
+                    .padding(.vertical, 8)
                 }
-                .padding(20)
-                .background(Color.appCardBackground)
-                .cornerRadius(16)
-                .padding(.horizontal, 20)
-                // Summary Cards
-                if viewModel.pollingSummary != nil {
-                    VStack(spacing: 16) {
-                        SummaryCard(
-                            title: "Total Polling",
-                            value: "\(viewModel.totalVotes)",
-                            icon: "list.clipboard",
-                            color: .appPrimary
-                        )
-                        SummaryCard(
-                            title: "Completed",
-                            value: "\(viewModel.positiveVotes)",
-                            icon: "checkmark.circle",
-                            color: .appSuccess
-                        )
-                        SummaryCard(
-                            title: "Pending",
-                            value: "\(viewModel.negativeVotes)",
-                            icon: "clock",
-                            color: .appGold
-                        )
-                        SummaryCard(
-                            title: "Candidates",
-                            value: "\(viewModel.candidateCount)",
-                            icon: "person.3",
-                            color: .appSecondary
-                        )
+                // Header/summary section
+                if let report = viewModel.pollingReport {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(viewModel.showingInProcess ? "This in-process report for the \(report.polling_order_name) polling for \(report.polling_name) will run from \(report.start_date) to \(report.end_date)." : "The most recent closed \(report.polling_order_name) polling was the \(report.polling_name) which ran from \(report.start_date) to \(report.end_date).")
+                            .font(.subheadline)
+                            .foregroundColor(.appText)
+                        if viewModel.showingInProcess {
+                            Text("In-Process Polling Candidate List (NOT FINALIZED):")
+                                .font(.subheadline)
+                                .fontWeight(.bold)
+                                .foregroundColor(.appError)
+                        }
                     }
                     .padding(.horizontal, 20)
                 }
+                // Show Notes checkbox
+                if viewModel.candidateReports.contains(where: { $0.hasNotes }) {
+                    HStack {
+                        Button(action: { viewModel.toggleShowNotes() }) {
+                            Image(systemName: viewModel.showNotes ? "checkmark.square" : "square")
+                                .foregroundColor(.appPrimary)
+                        }
+                        Text("Show Notes")
+                            .font(.subheadline)
+                            .foregroundColor(.appText)
+                    }
+                    .padding(.horizontal, 20)
+                }
+                // Candidates Section
+                if !viewModel.candidateReports.isEmpty {
+                    VStack(alignment: .leading, spacing: 24) {
+                        Text("Polling Candidate List:")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.appText)
+                            .padding(.horizontal, 20)
+                        ForEach(viewModel.candidateReports.sorted(by: { $0.percentage > $1.percentage })) { candidateVM in
+                            CandidateReportCard(candidateVM: candidateVM, showNotes: viewModel.showNotes)
+                        }
+                    }
+                    .padding(.vertical, 16)
+                }
                 // Recent Activity Card
-                if !viewModel.recentActivity.isEmpty {
+                if !viewModel.recentNotes.isEmpty {
                     VStack(alignment: .leading, spacing: 16) {
                         Text("Recent Activity")
                             .font(.headline)
                             .foregroundColor(.appText)
                             .padding(.horizontal, 20)
                         VStack(spacing: 0) {
-                            ForEach(viewModel.recentActivity.prefix(5), id: \ .id) { activity in
-                                ActivityRow(activity: activity)
-                                if activity.id != viewModel.recentActivity.prefix(5).last?.id {
+                            ForEach(viewModel.recentNotes.prefix(5), id: \ .id) { note in
+                                ActivityRow(activity: note)
+                                if note.id != viewModel.recentNotes.prefix(5).last?.id {
                                     Divider()
                                         .padding(.horizontal, 20)
                                 }
@@ -216,7 +215,7 @@ struct SummaryCard: View {
 }
 
 struct ActivityRow: View {
-    let activity: PollingActivity
+    let activity: PollingNote
     
     var body: some View {
         HStack(spacing: 12) {
@@ -228,11 +227,10 @@ struct ActivityRow: View {
                 .cornerRadius(6)
             
             VStack(alignment: .leading, spacing: 2) {
-                Text(activity.description)
+                Text(activity.note ?? "(No note)")
                     .font(.subheadline)
                     .foregroundColor(.appText)
-                
-                Text(activity.timestamp, style: .relative)
+                Text(activity.member_name ?? "Unknown")
                     .font(.caption)
                     .foregroundColor(.appText.opacity(0.6))
             }
@@ -244,77 +242,11 @@ struct ActivityRow: View {
     }
     
     private var activityIcon: String {
-        switch activity.type {
-        case "polling_created":
-            return "plus.circle"
-        case "polling_completed":
-            return "checkmark.circle"
-        case "score_updated":
-            return "chart.bar"
-        default:
-            return "circle"
-        }
+        return "note.text" // Assuming PollingNote is a type of activity
     }
     
     private var activityColor: Color {
-        switch activity.type {
-        case "polling_created":
-            return .appPrimary
-        case "polling_completed":
-            return .appSuccess
-        case "score_updated":
-            return .appSecondary
-        default:
-            return .appText
-        }
-    }
-}
-
-struct OrderPickerView: View {
-    @Binding var selectedOrder: PollingOrder?
-    let orders: [PollingOrder]
-    @Environment(\.dismiss) private var dismiss
-    
-    var body: some View {
-        NavigationView {
-            List(orders) { order in
-                Button(action: {
-                    selectedOrder = order
-                    dismiss()
-                }) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(order.name)
-                                .font(.headline)
-                                .foregroundColor(.appText)
-                            
-                            Text("Order #\(order.id)")
-                                .font(.subheadline)
-                                .foregroundColor(.appText.opacity(0.6))
-                        }
-                        
-                        Spacer()
-                        
-                        if selectedOrder?.id == order.id {
-                            Image(systemName: "checkmark")
-                                .foregroundColor(.appGold)
-                        }
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-            .listStyle(InsetGroupedListStyle())
-            .navigationTitle("Select Order")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Cancel") {
-                        dismiss()
-                    }
-                    .foregroundColor(.appGold)
-                }
-            }
-        }
+        return .appSecondary // Assuming PollingNote is a type of activity
     }
 }
 
@@ -328,103 +260,145 @@ class ReportViewModel: ObservableObject {
     @Published var chartData: [VoteData] = []
     @Published var isLoading = false
     @Published var errorMessage: String?
-    @Published var pollingSummary: PollingSummary?
-    @Published var recentActivity: [PollingActivity] = []
-    @Published var pollingOrders: [PollingOrder] = []
-    
+    @Published var activeMembers: String = ""
+    @Published var memberParticipation: String = ""
+    @Published var pollingReport: PollingReport?
+    @Published var inProcessAvailable: Bool = false
+    @Published var closedAvailable: Bool = false
+    @Published var showingInProcess: Bool = false // default to false, will set to true if in-process exists
+    @Published var candidateReports: [CandidateReportViewModel] = []
+    @Published var showNotes: Bool = true
+
     private let apiService = APIService.shared
-    
-    func loadReport(for orderId: Int) async {
-        // Mock data for now
-        totalVotes = 150
-        candidateCount = 5
-        positiveVotes = 85
-        negativeVotes = 45
-        
-        chartData = [
-            VoteData(category: "Positive", count: positiveVotes),
-            VoteData(category: "Negative", count: negativeVotes),
-            VoteData(category: "Neutral", count: totalVotes - positiveVotes - negativeVotes)
-        ]
-        
-        // Mock data for recent notes - using the new PollingNote structure
-        // Note: This is mock data since the actual structure is complex
-        // In a real scenario, these would come from the API
-        recentNotes = []
-    }
-    
-    func loadReportData() async {
+
+    func loadInitialReportData() async {
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
+        guard let user = KeychainService.shared.getUserData(), let orderId = user.pollingOrderId else {
+            errorMessage = "No user or polling order found. Please log in again."
+            return
+        }
         do {
-            // Use getPollingReport for summary and activities
-            // For now, use the first available order or a default
-            let orderId = pollingOrders.first?.id ?? 1
-            let reports = try await apiService.getPollingReport(orderId: orderId)
-            
-            // Get the first report from the array
-            guard let report = reports.first else {
-                errorMessage = "No report data available"
-                return
+            // Check for in-process report first
+            let inProcessReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: true)
+            inProcessAvailable = inProcessReport != nil
+            // Check for closed report
+            let closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
+            closedAvailable = closedReport != nil
+            // Default to in-process if available
+            if inProcessAvailable {
+                showingInProcess = true
+                await setReportData(from: inProcessReport, orderId: orderId, inProcess: true)
+            } else if closedAvailable {
+                showingInProcess = false
+                await setReportData(from: closedReport, orderId: orderId, inProcess: false)
+            } else {
+                errorMessage = "No report data available."
             }
-            
-            // Assume PollingReportSummary is used for summary cards
-            let summary = report.summary
-            // Map summary to local properties or a new struct if needed
-            pollingSummary = nil // Set to nil or map as needed
-            // For now, set recentActivity to empty or map from notes
-            recentActivity = []
-            pollingOrders = try await apiService.fetchPollingOrders()
-            // Load report data
-            await loadReport(for: orderId)
-            // Update view model (mock data)
-            totalVotes = summary.totalVotes
-            candidateCount = report.candidates.count
-            positiveVotes = summary.positiveVotes
-            negativeVotes = summary.negativeVotes
-            chartData = [
-                VoteData(category: "Positive", count: positiveVotes),
-                VoteData(category: "Negative", count: negativeVotes),
-                VoteData(category: "Neutral", count: summary.neutralVotes)
-            ]
-            recentNotes = report.notes
         } catch {
             errorMessage = error.localizedDescription
         }
     }
-    
-    func loadReportData(for orderId: Int) async {
+
+    func setReportData(from reportResponse: PollingReportResponse?, orderId: Int, inProcess: Bool) async {
+        guard let report = reportResponse?.report else { return }
+        pollingReport = report
+        activeMembers = reportResponse?.activeMembers ?? ""
+        memberParticipation = reportResponse?.memberParticipation ?? ""
+        totalVotes = Int(memberParticipation) ?? 0
+        candidateCount = Int(activeMembers) ?? 0
+        do {
+            let candidates = try await apiService.getAllCandidates(orderId: orderId)
+            var candidateVMs: [CandidateReportViewModel] = []
+            var anyNotes = false
+            for candidate in candidates {
+                async let pollingNotes = apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
+                async let externalNotes = apiService.getExternalNoteByCandidateId(candidateId: candidate.id)
+                let (polling, external) = try await (pollingNotes, externalNotes)
+                let vm = CandidateReportViewModel(candidate: candidate, pollingNotes: polling, report: report)
+                if vm.hasNotes { anyNotes = true }
+                candidateVMs.append(vm)
+            }
+            self.candidateReports = candidateVMs
+            self.showNotes = anyNotes
+        } catch {
+            print("Failed to fetch candidates or notes: \(error)")
+            self.candidateReports = []
+            self.showNotes = false
+        }
+    }
+
+    func toggleReport() async {
+        guard let user = KeychainService.shared.getUserData(), let orderId = user.pollingOrderId else {
+            errorMessage = "No user or polling order found. Please log in again."
+            return
+        }
         isLoading = true
         errorMessage = nil
         defer { isLoading = false }
         do {
-            let reports = try await apiService.getPollingReport(orderId: orderId)
-            
-            // Get the first report from the array
-            guard let report = reports.first else {
-                errorMessage = "No report data available"
-                return
+            if showingInProcess {
+                // Switch to closed
+                let closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
+                showingInProcess = false
+                await setReportData(from: closedReport, orderId: orderId, inProcess: false)
+            } else {
+                // Switch to in-process
+                let inProcessReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: true)
+                showingInProcess = true
+                await setReportData(from: inProcessReport, orderId: orderId, inProcess: true)
             }
-            
-            let summary = report.summary
-            pollingSummary = nil // Set to nil or map as needed
-            recentActivity = []
-            pollingOrders = try await apiService.fetchPollingOrders()
-            await loadReport(for: orderId)
-            totalVotes = summary.totalVotes
-            candidateCount = report.candidates.count
-            positiveVotes = summary.positiveVotes
-            negativeVotes = summary.negativeVotes
-            chartData = [
-                VoteData(category: "Positive", count: positiveVotes),
-                VoteData(category: "Negative", count: negativeVotes),
-                VoteData(category: "Neutral", count: summary.neutralVotes)
-            ]
-            recentNotes = report.notes
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func toggleShowNotes() {
+        showNotes.toggle()
+    }
+}
+
+struct CandidateReportViewModel: Identifiable {
+    let id: Int
+    let name: String
+    let candidate: Candidate
+    let pollingNotes: [PollingNote]
+    let recommended: String
+    let yesCount: Int
+    let noCount: Int
+    let waitCount: Int
+    let abstainCount: Int
+    let percentage: Double
+    let hasNotes: Bool
+    let showRecommendation: Bool
+    init(candidate: Candidate, pollingNotes: [PollingNote], report: PollingReport) {
+        self.id = candidate.id
+        self.name = candidate.name
+        self.candidate = candidate
+        // Only include polling notes for the current polling session
+        self.pollingNotes = pollingNotes.filter { $0.pollingId == report.polling_id }
+        // Calculate vote counts
+        self.yesCount = self.pollingNotes.filter { $0.vote == 1 }.count
+        self.noCount = self.pollingNotes.filter { $0.vote == 2 }.count
+        self.waitCount = self.pollingNotes.filter { $0.vote == 3 }.count
+        self.abstainCount = self.pollingNotes.filter { $0.vote == 4 }.count
+        // Percentage calculation: (Yes / (Yes + No + Wait)) * 100, Abstain not included in denominator
+        let denominator = yesCount + noCount + waitCount
+        self.percentage = denominator > 0 ? (Double(yesCount) / Double(denominator)) * 100.0 : 0.0
+        // Recommendation logic (threshold from report.polling_order_polling_score)
+        let threshold = Double(report.polling_order_polling_score)
+        if threshold == 0 {
+            self.recommended = ""
+            self.showRecommendation = false
+        } else if percentage >= threshold {
+            self.recommended = "has been recommended to join the order with a rating of:"
+            self.showRecommendation = true
+        } else {
+            self.recommended = "has NOT been recommended to join the order with a rating of:"
+            self.showRecommendation = true
+        }
+        self.hasNotes = !self.pollingNotes.isEmpty
     }
 }
 
@@ -440,6 +414,61 @@ class OrderPickerViewModel: ObservableObject {
             PollingOrder(id: 1234, name: "Spring Elections 2024", adminId: 1, adminAssistantId: 2, notesTimeVisible: 24),
             PollingOrder(id: 1235, name: "Officer Nominations", adminId: 1, adminAssistantId: 2, notesTimeVisible: 24)
         ]
+    }
+}
+
+struct CandidateReportCard: View {
+    let candidateVM: CandidateReportViewModel
+    let showNotes: Bool
+    @State private var notesExpanded: Bool = false
+    var filteredNotes: [PollingNote] {
+        candidateVM.pollingNotes.filter { note in
+            if let text = note.note {
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return !trimmed.isEmpty && trimmed.lowercased() != "no note content"
+            }
+            return false
+        }
+    }
+    private var voteBreakdownText: String {
+        var parts: [String] = []
+        if candidateVM.yesCount > 0 { parts.append("Yes: \(candidateVM.yesCount)") }
+        if candidateVM.noCount > 0 { parts.append("No: \(candidateVM.noCount)") }
+        if candidateVM.waitCount > 0 { parts.append("Wait: \(candidateVM.waitCount)") }
+        if candidateVM.abstainCount > 0 { parts.append("Abstain: \(candidateVM.abstainCount)") }
+        let joined = parts.joined(separator: ", ")
+        return "( \(joined) ) = \(String(format: "%.2f", candidateVM.percentage))%"
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(candidateVM.name)
+                .font(.headline)
+                .foregroundColor(.appPrimary)
+            if candidateVM.showRecommendation {
+                Text(candidateVM.recommended)
+                    .font(.subheadline)
+                    .foregroundColor(.appText)
+            }
+            Text(voteBreakdownText)
+                .font(.caption)
+                .foregroundColor(.appText.opacity(0.8))
+            if showNotes && candidateVM.hasNotes && !filteredNotes.isEmpty {
+                DisclosureGroup(isExpanded: $notesExpanded) {
+                    ForEach(filteredNotes) { note in
+                        NoteCard(note: note)
+                    }
+                } label: {
+                    Text("Notes")
+                        .font(.subheadline)
+                        .foregroundColor(.appText)
+                }
+                .padding(.top, 4)
+            }
+        }
+        .padding(16)
+        .background(Color.appCardBackground)
+        .cornerRadius(12)
+        .padding(.horizontal, 20)
     }
 }
 

@@ -401,4 +401,20 @@ class APIService {
         
         return try await performRequest(request)
     }
+}
+
+extension APIService {
+    // New method to fetch and decode the mixed array response for polling report
+    func getPollingReportResponse(orderId: Int, inProcess: Bool = false) async throws -> PollingReportResponse {
+        let endpoint = inProcess ? "/polling/inprocesspollingreport/\(orderId)" : "/polling/pollingreport/\(orderId)"
+        var request = URLRequest(url: URL(string: "\(baseURL)\(endpoint)")!)
+        request.httpMethod = "GET"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token = keychainService.getAuthToken() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, _) = try await session.data(for: request)
+        let array = try JSONSerialization.jsonObject(with: data) as? [Any] ?? []
+        return try PollingReportResponse(from: array)
+    }
 } 

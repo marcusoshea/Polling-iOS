@@ -434,7 +434,7 @@ struct CandidateDetailView: View {
                                 case .success(let image):
                                     image
                                         .resizable()
-                                        .aspectRatio(contentMode: .fill)
+                                        .scaledToFill() // Instead of .aspectRatio(contentMode: .fill)
                                         .frame(width: 100, height: 100)
                                         .clipped()
                                         .cornerRadius(8)

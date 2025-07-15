@@ -122,6 +122,7 @@ struct PollingNote: Codable, Identifiable {
     let approved: Bool
     let removed: Bool
     let active: Bool
+    let member_name: String?
     
     enum CodingKeys: String, CodingKey {
         case id = "polling_notes_id"
@@ -149,6 +150,7 @@ struct PollingNote: Codable, Identifiable {
         case approved
         case removed
         case active
+        case member_name
     }
 }
 
@@ -253,18 +255,39 @@ struct PollingReportSummary: Codable {
     }
 }
 
-// MARK: - Polling Report
+// MARK: - Polling Report (API /polling/pollingreport/:id)
 struct PollingReport: Codable {
-    let orderId: Int
-    let summary: PollingReportSummary
-    let candidates: [Candidate]
-    let notes: [PollingNote]
-    
-    enum CodingKeys: String, CodingKey {
-        case orderId = "order_id"
-        case summary
-        case candidates
-        case notes
+    let polling_id: Int
+    let polling_name: String
+    let start_date: String
+    let end_date: String
+    let polling_order_id: Int
+    let polling_order_name: String
+    let polling_order_admin: Int
+    let polling_order_admin_assistant: Int
+    let polling_order_polling_participation: Int
+    let polling_order_polling_score: Int
+    let polling_order_polling_type: Int
+    let polling_order_notes_time_visible: Int
+}
+
+struct PollingReportResponse {
+    let report: PollingReport
+    let activeMembers: String
+    let memberParticipation: String
+
+    // Custom initializer for mixed array response
+    init(from array: [Any]) throws {
+        guard let reportDict = array.first as? [String: Any],
+              let reportData = try? JSONSerialization.data(withJSONObject: reportDict),
+              let report = try? JSONDecoder().decode(PollingReport.self, from: reportData) else {
+            throw NSError(domain: "Decoding", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid report object"])
+        }
+        let activeMembers = (array.count > 1 ? (array[1] as? [String: String])? ["active_members"] : nil) ?? ""
+        let memberParticipation = (array.count > 2 ? (array[2] as? [String: String])? ["member_participation"] : nil) ?? ""
+        self.report = report
+        self.activeMembers = activeMembers
+        self.memberParticipation = memberParticipation
     }
 }
 
