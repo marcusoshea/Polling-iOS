@@ -99,22 +99,44 @@ class CandidatesViewModel: ObservableObject {
         isPrivateNote.toggle()
     }
     
-    func addExternalNote() async {
-        guard !newNoteText.isEmpty else { return }
+    func addExternalNote(_ noteText: String) async {
+        guard !noteText.isEmpty else { return }
         
         guard let selectedCandidate = selectedCandidate else {
             errorMessage = "No candidate selected"
             return
         }
         
+        // Gather required fields
+        guard let user = KeychainService.shared.getUserData() else {
+            errorMessage = "User not found. Please log in again."
+            return
+        }
+        guard let authToken = KeychainService.shared.getAuthToken() else {
+            errorMessage = "Auth token not found. Please log in again."
+            return
+        }
+        let pollingOrderMemberId = user.id
+        let enCreatedAt: String = {
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.string(from: Date())
+        }()
+        
         do {
-            try await apiService.createExternalNote(candidateId: selectedCandidate.id, note: newNoteText)
+            try await apiService.createExternalNote(
+                candidateId: selectedCandidate.id,
+                note: noteText,
+                pollingOrderMemberId: pollingOrderMemberId,
+                enCreatedAt: enCreatedAt,
+                authToken: authToken
+            )
             
             // Reload external notes to get the updated list
             let updatedNotes = try await apiService.getExternalNoteByCandidateId(candidateId: selectedCandidate.id)
             externalNotes = updatedNotes
             
-            newNoteText = ""
+            // No need to clear newNoteText here; handled in the view
             isPrivateNote = false
         } catch {
             errorMessage = error.localizedDescription
@@ -123,8 +145,19 @@ class CandidatesViewModel: ObservableObject {
     
     func deleteExternalNote(_ note: ExternalNote) async {
         do {
-            try await apiService.removeExternalNote(externalNoteId: note.id)
-            
+            guard let user = KeychainService.shared.getUserData() else {
+                errorMessage = "User not found. Please log in again."
+                return
+            }
+            guard let authToken = KeychainService.shared.getAuthToken() else {
+                errorMessage = "Auth token not found. Please log in again."
+                return
+            }
+            try await apiService.removeExternalNote(
+                externalNoteId: note.id,
+                pollingOrderMemberId: user.id,
+                authToken: authToken
+            )
             // Reload external notes to get the updated list
             if let selectedCandidate = selectedCandidate {
                 let updatedNotes = try await apiService.getExternalNoteByCandidateId(candidateId: selectedCandidate.id)

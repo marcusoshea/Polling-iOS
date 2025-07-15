@@ -181,14 +181,12 @@ struct CandidatesView: View {
                         externalNotes: viewModel.externalNotes,
                         pollingGroups: viewModel.pollingGroups,
                         candidateImages: viewModel.candidateImages,
-                        newNoteText: viewModel.newNoteText,
                         isPrivateNote: viewModel.isPrivateNote,
                         showPollingNotes: viewModel.showPollingNotes,
                         showExternalNotes: viewModel.showExternalNotes,
-                        onNewNoteTextChange: { viewModel.updateNewNoteText($0) },
                         onPrivateNoteToggle: { viewModel.toggleIsPrivateNote() },
-                        onAddNote: {
-                            Task { await viewModel.addExternalNote() }
+                        onAddNote: { noteText in
+                            Task { await viewModel.addExternalNote(noteText) }
                         },
                         onDeleteNote: { note in
                             Task { await viewModel.deleteExternalNote(note) }
@@ -213,13 +211,11 @@ struct CandidateDetailView: View {
     let externalNotes: [ExternalNote]
     let pollingGroups: [PollingGroup]
     let candidateImages: [CandidateImage]
-    let newNoteText: String
     let isPrivateNote: Bool
     let showPollingNotes: Bool
     let showExternalNotes: Bool
-    let onNewNoteTextChange: (String) -> Void
     let onPrivateNoteToggle: () -> Void
-    let onAddNote: () -> Void
+    let onAddNote: (String) -> Void
     let onDeleteNote: (ExternalNote) -> Void
     let onTogglePollingNotes: () -> Void
     let onToggleExternalNotes: () -> Void
@@ -229,6 +225,7 @@ struct CandidateDetailView: View {
     @State private var showingFullScreenImage = false
     @State private var shouldPresentSheet = false
     @State private var expandedPolls: Set<String> = []
+    @State private var localNoteText: String = ""
     
     var body: some View {
         ScrollView {
@@ -263,6 +260,8 @@ struct CandidateDetailView: View {
             if let mostRecent = sortedPollTitles.first {
                 expandedPolls = [mostRecent]
             }
+            // Initialize local note text with parent value
+            // localNoteText = newNoteText // Removed
         }
     }
     
@@ -357,21 +356,23 @@ struct CandidateDetailView: View {
     private var externalNotesSection: some View {
         Group {
             if !externalNotes.isEmpty {
-                notesSection(
-                    title: "Non Polling Notes (\(externalNotes.count))",
-                    isExpanded: Binding(
-                        get: { showExternalNotes },
-                        set: { _ in onToggleExternalNotes() }
-                    ),
-                    notes: externalNotes.map { note in
-                        NoteItem(
-                            text: note.text,
-                            author: note.pollingOrderMemberId.name,
-                            timestamp: note.timestamp,
-                            pollTitle: nil
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Non Polling Notes (\(externalNotes.count))")
+                        .font(.headline)
+                        .foregroundColor(.appText)
+                    ForEach(externalNotes) { note in
+                        let currentUserId = KeychainService.shared.getUserData()?.id
+                        let canDelete = note.pollingOrderMemberId.id == currentUserId
+                        ExternalNoteCard(
+                            note: note,
+                            onDelete: { onDeleteNote(note) },
+                            canDelete: canDelete
                         )
                     }
-                )
+                }
+                .padding(20)
+                .background(Color.appCardBackground)
+                .cornerRadius(16)
             } else {
                 EmptyView()
             }
@@ -384,21 +385,15 @@ struct CandidateDetailView: View {
                 .font(.headline)
                 .foregroundColor(.appText)
             
-            TextField("Enter your note...", text: Binding(
-                get: { newNoteText },
-                set: { onNewNoteTextChange($0) }
-            ))
-            .textFieldStyle(RoundedBorderTextFieldStyle())
-            .background(Color.white)
-            .cornerRadius(8)
+            TextField("Enter your note...", text: $localNoteText)
+                .textFieldStyle(RoundedBorderTextFieldStyle())
+                .background(Color.white)
+                .cornerRadius(8)
             
-            Toggle("Private Note", isOn: Binding(
-                get: { isPrivateNote },
-                set: { _ in onPrivateNoteToggle() }
-            ))
-            .foregroundColor(.appText)
-            
-            Button(action: onAddNote) {
+            Button(action: {
+                onAddNote(localNoteText)
+                localNoteText = ""
+            }) {
                 Text("Add Note")
                     .fontWeight(.semibold)
                     .frame(maxWidth: .infinity)
@@ -407,7 +402,7 @@ struct CandidateDetailView: View {
                     .foregroundColor(.white)
                     .cornerRadius(10)
             }
-            .disabled(newNoteText.isEmpty)
+            .disabled(localNoteText.isEmpty)
         }
         .padding(20)
         .background(Color.appCardBackground)
@@ -469,8 +464,9 @@ struct CandidateDetailView: View {
                             }
                             
                             // Image Description
+                            // Only use plainDescription for image descriptions that may contain HTML from external sources
                             if !image.imageDescription.isEmpty {
-                                Text(cleanHtmlText(image.imageDescription))
+                                Text(image.plainDescription)
                                     .font(.caption)
                                     .foregroundColor(.black)
                                     .multilineTextAlignment(.center)
@@ -539,6 +535,7 @@ struct NoteCard: View {
 struct ExternalNoteCard: View {
     let note: ExternalNote
     let onDelete: () -> Void
+    let canDelete: Bool
     
     private var formattedDate: String {
         let isoFormatter = ISO8601DateFormatter()
@@ -569,9 +566,11 @@ struct ExternalNoteCard: View {
                 Text(note.pollingOrderMemberId.name)
                     .font(.headline)
                 Spacer()
-                Button(action: onDelete) {
-                    Image(systemName: "trash")
-                        .foregroundColor(.red)
+                if canDelete {
+                    Button(action: onDelete) {
+                        Image(systemName: "trash")
+                            .foregroundColor(.red)
+                    }
                 }
             }
             Text(note.text)

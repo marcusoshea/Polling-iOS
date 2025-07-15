@@ -33,6 +33,21 @@ enum APIError: Error, LocalizedError {
     }
 }
 
+// Add this struct before the APIService class so it is in scope
+struct ExternalNoteRequest: Codable {
+    let candidate_id: String
+    let external_note: String
+    let polling_order_member_id: Int
+    let en_created_at: String
+    let authToken: String
+}
+
+struct ExternalNoteDeleteRequest: Codable {
+    let external_notes_id: Int
+    let polling_order_member_id: Int
+    let authToken: String
+}
+
 class APIService {
     static let shared = APIService()
     
@@ -166,13 +181,23 @@ class APIService {
         return try await get(endpoint: "/externalnote/candidate/\(candidateId)")
     }
     
-    func createExternalNote(candidateId: Int, note: String) async throws -> EmptyResponse {
-        let body = ["candidate_id": "\(candidateId)", "external_note": note]
+    func createExternalNote(candidateId: Int, note: String, pollingOrderMemberId: Int, enCreatedAt: String, authToken: String) async throws -> EmptyResponse {
+        let body = ExternalNoteRequest(
+            candidate_id: "\(candidateId)",
+            external_note: note,
+            polling_order_member_id: pollingOrderMemberId,
+            en_created_at: enCreatedAt,
+            authToken: authToken
+        )
         return try await post(endpoint: "/externalnote/create", body: body)
     }
     
-    func removeExternalNote(externalNoteId: Int) async throws -> EmptyResponse {
-        let body = ["external_notes_id": "\(externalNoteId)"]
+    func removeExternalNote(externalNoteId: Int, pollingOrderMemberId: Int, authToken: String) async throws -> EmptyResponse {
+        let body = ExternalNoteDeleteRequest(
+            external_notes_id: externalNoteId,
+            polling_order_member_id: pollingOrderMemberId,
+            authToken: authToken
+        )
         return try await post(endpoint: "/externalnote/delete", body: body)
     }
     

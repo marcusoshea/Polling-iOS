@@ -361,12 +361,32 @@ struct CandidateImage: Identifiable, Codable {
     let candidateId: Int
     let imageUrl: String
     let imageDescription: String
-    
+    let plainDescription: String
+
     enum CodingKeys: String, CodingKey {
         case id
         case candidateId = "candidate_id"
         case imageUrl = "image_url"
         case imageDescription = "image_description"
+    }
+
+    // Custom initializer for decoding
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        candidateId = try container.decode(Int.self, forKey: .candidateId)
+        imageUrl = try container.decode(String.self, forKey: .imageUrl)
+        imageDescription = try container.decode(String.self, forKey: .imageDescription)
+        plainDescription = cleanHtmlText(imageDescription)
+    }
+
+    // For manual creation (if needed)
+    init(id: Int, candidateId: Int, imageUrl: String, imageDescription: String) {
+        self.id = id
+        self.candidateId = candidateId
+        self.imageUrl = imageUrl
+        self.imageDescription = imageDescription
+        self.plainDescription = cleanHtmlText(imageDescription)
     }
 }
 
@@ -418,4 +438,13 @@ struct NoteItem: Identifiable {
     let author: String
     let timestamp: String
     let pollTitle: String?
+} 
+
+// Move cleanHtmlText here for use in CandidateImage
+fileprivate func cleanHtmlText(_ htmlString: String) -> String {
+    let data = Data(htmlString.utf8)
+    if let attributedString = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.html], documentAttributes: nil) {
+        return attributedString.string
+    }
+    return htmlString
 } 
