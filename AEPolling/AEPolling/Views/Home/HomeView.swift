@@ -77,7 +77,7 @@ class HomeViewModel: ObservableObject {
         if !pollingOrderName.isEmpty {
             welcomeMessage = "Welcome to the order of the \(pollingOrderName) polling application!\n\nPlease select what you would like to view from the menu above"
         } else {
-            welcomeMessage = "Welcome to the polling application!\n\nPlease select what you would like to view from the menu above"
+            welcomeMessage = "Welcome to the polling application!\n\nPlease select what you would like to view from the navigation menu below"
         }
         
         // Get app version

@@ -542,7 +542,7 @@ struct CandidateNotesModal: View {
                             // External Notes Section
                             if !externalNotes.isEmpty {
                                 notesSection(
-                                    title: "External Notes (\(externalNotes.count))",
+                                    title: "Non Polling Notes (\(externalNotes.count))",
                                     isExpanded: $showExternalNotes,
                                     notes: externalNotes.map { note in
                                         NoteItem(
@@ -649,6 +649,29 @@ struct CandidateNotesModal: View {
 struct CandidateNoteCard: View {
     let note: NoteItem
     
+    private var formattedDate: String {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = isoFormatter.date(from: note.timestamp) {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return formatter.string(from: date)
+        } else {
+            // Try without fractional seconds
+            let simpleFormatter = ISO8601DateFormatter()
+            if let date = simpleFormatter.date(from: note.timestamp) {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .medium
+                formatter.timeStyle = .none
+                return formatter.string(from: date)
+            } else {
+                return note.timestamp
+            }
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(note.text)
@@ -659,15 +682,9 @@ struct CandidateNoteCard: View {
                     .font(.caption)
                     .foregroundColor(.appGold)
                 Spacer()
-                if let date = ISO8601DateFormatter().date(from: note.timestamp) {
-                    Text(date, style: .date)
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                } else {
-                    Text(note.timestamp)
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
+                Text(formattedDate)
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
         }
         .padding(12)

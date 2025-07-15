@@ -228,6 +228,7 @@ struct CandidateDetailView: View {
     @State private var selectedImage: CandidateImage?
     @State private var showingFullScreenImage = false
     @State private var shouldPresentSheet = false
+    @State private var expandedPolls: Set<String> = []
     
     var body: some View {
         ScrollView {
@@ -257,6 +258,12 @@ struct CandidateDetailView: View {
                 selectedImage = nil
             }
         }
+        .onAppear {
+            // Expand the most recent poll by default
+            if let mostRecent = sortedPollTitles.first {
+                expandedPolls = [mostRecent]
+            }
+        }
     }
     
     private var candidateHeaderSection: some View {
@@ -271,16 +278,8 @@ struct CandidateDetailView: View {
                     .font(.title2)
                     .fontWeight(.semibold)
                     .foregroundColor(.white)
-                
-                Text("Polling Order ID: \(candidate.pollingOrderId)")
-                    .font(.subheadline)
-                    .foregroundColor(.white.opacity(0.8))
-                
-                if let watchList = candidate.watchList {
-                    Text("Watch List: \(watchList)")
-                        .font(.caption)
-                        .foregroundColor(.appGold)
-                }
+                              
+             
             }
         }
         .padding(20)
@@ -300,66 +299,83 @@ struct CandidateDetailView: View {
                 externalNotesSection
             }
             
+            // No Notes Message
+            if pollingNotes.isEmpty && externalNotes.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "note.text")
+                        .font(.system(size: 50))
+                        .foregroundColor(.appGold)
+                    Text("No Notes Available")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                    Text("No notes have been submitted for this candidate yet.")
+                        .font(.subheadline)
+                        .foregroundColor(.white.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                }
+                .padding(.horizontal, 40)
+                .padding(.top, 40)
+            }
+            
             // Add Note Section
             addNoteSection
         }
     }
     
     private var pollingNotesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button(action: onTogglePollingNotes) {
-                HStack {
-                    Text("Polling Notes (\(pollingNotes.count))")
-                        .font(.headline)
-                        .foregroundColor(.appText)
-                    Spacer()
-                    Image(systemName: showPollingNotes ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.appText)
+        VStack(spacing: 16) {
+            ForEach(sortedPollTitles, id: \.self) { pollTitle in
+                let notesForPoll = groupedPollingNotes[pollTitle] ?? []
+                let validNotes = notesForPoll.filter { note in
+                    let noteText = note.note ?? ""
+                    return !noteText.isEmpty && noteText != "No note content"
                 }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            if showPollingNotes {
-                VStack(spacing: 8) {
-                    ForEach(pollingNotes) { note in
-                        NoteCard(note: note)
-                    }
+                
+                if !validNotes.isEmpty {
+                    notesSection(
+                        title: pollTitle,
+                        isExpanded: Binding(
+                            get: { expandedPolls.contains(pollTitle) },
+                            set: { expanded in
+                                if expanded { expandedPolls.insert(pollTitle) } else { expandedPolls.remove(pollTitle) }
+                            }
+                        ),
+                        notes: validNotes.map { note in
+                            NoteItem(
+                                text: note.note ?? "",
+                                author: note.name,
+                                timestamp: note.createdAt,
+                                pollTitle: note.pollingName
+                            )
+                        }
+                    )
                 }
             }
         }
-        .padding(20)
-        .background(Color.appCardBackground)
-        .cornerRadius(16)
     }
     
     private var externalNotesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button(action: onToggleExternalNotes) {
-                HStack {
-                    Text("External Notes (\(externalNotes.count))")
-                        .font(.headline)
-                        .foregroundColor(.appText)
-                    Spacer()
-                    Image(systemName: showExternalNotes ? "chevron.up" : "chevron.down")
-                        .foregroundColor(.appText)
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
-            if showExternalNotes {
-                VStack(spacing: 8) {
-                    ForEach(externalNotes) { note in
-                        ExternalNoteCard(
-                            note: note,
-                            onDelete: { onDeleteNote(note) }
+        Group {
+            if !externalNotes.isEmpty {
+                notesSection(
+                    title: "Non Polling Notes (\(externalNotes.count))",
+                    isExpanded: Binding(
+                        get: { showExternalNotes },
+                        set: { _ in onToggleExternalNotes() }
+                    ),
+                    notes: externalNotes.map { note in
+                        NoteItem(
+                            text: note.text,
+                            author: note.pollingOrderMemberId.name,
+                            timestamp: note.timestamp,
+                            pollTitle: nil
                         )
                     }
-                }
+                )
+            } else {
+                EmptyView()
             }
         }
-        .padding(20)
-        .background(Color.appCardBackground)
-        .cornerRadius(16)
     }
     
     private var addNoteSection: some View {
@@ -466,6 +482,30 @@ struct CandidateDetailView: View {
 
 struct NoteCard: View {
     let note: PollingNote
+    
+    private var formattedDate: String {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = isoFormatter.date(from: note.createdAt) {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return formatter.string(from: date)
+        } else {
+            // Try without fractional seconds
+            let simpleFormatter = ISO8601DateFormatter()
+            if let date = simpleFormatter.date(from: note.createdAt) {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .medium
+                formatter.timeStyle = .none
+                return formatter.string(from: date)
+            } else {
+                return note.createdAt
+            }
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(note.note ?? "No note content")
@@ -476,15 +516,9 @@ struct NoteCard: View {
                     .font(.caption)
                     .foregroundColor(.appGold)
                 Spacer()
-                if let date = ISO8601DateFormatter().date(from: note.createdAt) {
-                    Text(date, style: .date)
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                } else {
-                    Text(note.createdAt)
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
+                Text(formattedDate)
+                    .font(.caption)
+                    .foregroundColor(.gray)
             }
         }
         .padding(12)
@@ -496,6 +530,30 @@ struct NoteCard: View {
 struct ExternalNoteCard: View {
     let note: ExternalNote
     let onDelete: () -> Void
+    
+    private var formattedDate: String {
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        
+        if let date = isoFormatter.date(from: note.timestamp) {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .none
+            return formatter.string(from: date)
+        } else {
+            // Try without fractional seconds
+            let simpleFormatter = ISO8601DateFormatter()
+            if let date = simpleFormatter.date(from: note.timestamp) {
+                let formatter = DateFormatter()
+                formatter.dateStyle = .medium
+                formatter.timeStyle = .none
+                return formatter.string(from: date)
+            } else {
+                return note.timestamp
+            }
+        }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
@@ -510,15 +568,9 @@ struct ExternalNoteCard: View {
             Text(note.text)
                 .font(.body)
                 .foregroundColor(.appText)
-            if let date = ISO8601DateFormatter().date(from: note.timestamp) {
-                Text(date, style: .date)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            } else {
-                Text(note.timestamp)
-                    .font(.caption)
-                    .foregroundColor(.gray)
-            }
+            Text(formattedDate)
+                .font(.caption)
+                .foregroundColor(.gray)
         }
         .padding(12)
         .background(Color.appCardBackground)
@@ -585,6 +637,52 @@ struct FullScreenImageView: View {
         .onAppear {
             print("🖼️ FullScreen: View appeared for image: \(image.imageUrl)")
         }
+    }
+}
+
+// Helper functions for polling notes grouping
+extension CandidateDetailView {
+    var groupedPollingNotes: [String: [PollingNote]] {
+        let validNotes = pollingNotes.filter { note in
+            let noteText = note.note ?? ""
+            return !noteText.isEmpty && noteText != "No note content"
+        }
+        return Dictionary(grouping: validNotes) { $0.pollingName }
+    }
+    
+    var sortedPollTitles: [String] {
+        groupedPollingNotes.keys.sorted { lhs, rhs in
+            let lhsDate = groupedPollingNotes[lhs]?.first?.endDate ?? groupedPollingNotes[lhs]?.first?.startDate ?? ""
+            let rhsDate = groupedPollingNotes[rhs]?.first?.endDate ?? groupedPollingNotes[rhs]?.first?.startDate ?? ""
+            return lhsDate > rhsDate
+        }
+    }
+    
+    func notesSection(title: String, isExpanded: Binding<Bool>, notes: [NoteItem]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button(action: { isExpanded.wrappedValue.toggle() }) {
+                HStack {
+                    Text(title)
+                        .font(.headline)
+                        .foregroundColor(.appText)
+                    Spacer()
+                    Image(systemName: isExpanded.wrappedValue ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.appText)
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            if isExpanded.wrappedValue {
+                VStack(spacing: 8) {
+                    ForEach(notes, id: \.id) { note in
+                        CandidateNoteCard(note: note)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(Color.appCardBackground)
+        .cornerRadius(16)
     }
 }
 
@@ -658,6 +756,11 @@ class CandidatesViewModel: ObservableObject {
             isPrivateNote = false
             showPollingNotes = false
             showExternalNotes = false
+            
+            // Expand the most recent poll by default
+            if let mostRecent = polling.first?.pollingName {
+                // This will be handled in the view when it loads
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
