@@ -360,11 +360,13 @@ struct CandidateImage: Identifiable, Codable {
     let id: Int
     let candidateId: Int
     let imageUrl: String
+    let imageDescription: String
     
     enum CodingKeys: String, CodingKey {
         case id
         case candidateId = "candidate_id"
         case imageUrl = "image_url"
+        case imageDescription = "image_description"
     }
 }
 

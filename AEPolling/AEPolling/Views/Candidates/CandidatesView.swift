@@ -423,52 +423,61 @@ struct CandidateDetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(candidateImages) { image in
-                        AsyncImage(url: URL(string: image.imageUrl)) { phase in
-                            switch phase {
-                            case .empty:
-                                VStack {
-                                    ProgressView()
+                        VStack(spacing: 8) {
+                            AsyncImage(url: URL(string: image.imageUrl)) { phase in
+                                switch phase {
+                                case .empty:
+                                    VStack {
+                                        ProgressView()
+                                            .frame(width: 100, height: 100)
+                                            .background(Color.gray.opacity(0.3))
+                                            .cornerRadius(8)
+                                        Text("Loading...")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
                                         .frame(width: 100, height: 100)
-                                        .background(Color.gray.opacity(0.3))
+                                        .clipped()
                                         .cornerRadius(8)
-                                    Text("Loading...")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
+                                case .failure:
+                                    VStack {
+                                        Image(systemName: "photo")
+                                            .font(.system(size: 40))
+                                            .foregroundColor(.gray)
+                                            .frame(width: 100, height: 100)
+                                            .background(Color.gray.opacity(0.3))
+                                            .cornerRadius(8)
+                                        Text("Failed to load")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                @unknown default:
+                                    EmptyView()
                                 }
-                            case .success(let image):
-                                image
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fill)
-                                    .frame(width: 100, height: 100)
-                                    .clipped()
-                                    .cornerRadius(8)
-                            case .failure:
-                                VStack {
-                                    Image(systemName: "photo")
-                                        .font(.system(size: 40))
-                                        .foregroundColor(.gray)
-                                        .frame(width: 100, height: 100)
-                                        .background(Color.gray.opacity(0.3))
-                                        .cornerRadius(8)
-                                    Text("Failed to load")
-                                        .font(.caption)
-                                        .foregroundColor(.gray)
-                                }
-                            @unknown default:
-                                EmptyView()
                             }
-                        }
-                        .onTapGesture {
-                            print("🖼️ Image tapped: \(image.imageUrl)")
-                            selectedImage = image
-                            DispatchQueue.main.async {
+                            .onTapGesture {
+                                print("🖼️ Image tapped: \(image.imageUrl)")
+                                selectedImage = image
                                 shouldPresentSheet = true
                             }
+                            .onAppear {
+                                print("🖼️ Attempting to load image: \(image.imageUrl)")
+                            }
+                            
+                            // Image Description
+                            if !image.imageDescription.isEmpty {
+                                Text(cleanHtmlText(image.imageDescription))
+                                    .font(.caption)
+                                    .foregroundColor(.black)
+                                    .multilineTextAlignment(.center)
+                                    .frame(width: 100)
+                                    .lineLimit(3)
+                            }
                         }
-                        .onAppear {
-                            print("🖼️ Attempting to load image: \(image.imageUrl)")
-                        }
-
                     }
                 }
                 .padding(.horizontal, 4)
@@ -640,6 +649,15 @@ struct FullScreenImageView: View {
     }
 }
 
+// Helper function to clean HTML text
+private func cleanHtmlText(_ htmlString: String) -> String {
+    let data = Data(htmlString.utf8)
+    if let attributedString = try? NSAttributedString(data: data, options: [.documentType: NSAttributedString.DocumentType.html], documentAttributes: nil) {
+        return attributedString.string
+    }
+    return htmlString
+}
+
 // Helper functions for polling notes grouping
 extension CandidateDetailView {
     var groupedPollingNotes: [String: [PollingNote]] {
@@ -686,147 +704,7 @@ extension CandidateDetailView {
     }
 }
 
-@MainActor
-class CandidatesViewModel: ObservableObject {
-    @Published var candidates: [Candidate] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String?
-    @Published var selectedCandidate: Candidate?
-    
-    // Properties for CandidateDetailView
-    @Published var pollingNotes: [PollingNote] = []
-    @Published var externalNotes: [ExternalNote] = []
-    @Published var pollingGroups: [PollingGroup] = []
-    @Published var candidateImages: [CandidateImage] = []
-    @Published var newNoteText: String = ""
-    @Published var isPrivateNote: Bool = false
-    @Published var showPollingNotes: Bool = false
-    @Published var showExternalNotes: Bool = false
-    
-    private let apiService = APIService.shared
-    
-    func loadCandidates() async {
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            // Get polling order ID from user
-            let user = KeychainService.shared.getUserData()
-            guard let orderId = user?.pollingOrderId else {
-                errorMessage = "Polling order ID not found. Please log in again."
-                isLoading = false
-                return
-            }
-            candidates = try await apiService.getAllCandidates(orderId: orderId)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        
-        isLoading = false
-    }
-    
-    // Load candidate details when a candidate is selected
-    func loadCandidateDetails(for candidate: Candidate) async {
-        selectedCandidate = candidate
-        isLoading = true
-        errorMessage = nil
-        
-        do {
-            async let pollingNotesTask = apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
-            async let externalNotesTask = apiService.getExternalNoteByCandidateId(candidateId: candidate.id)
-            async let candidateImagesTask = apiService.getCandidateImages(candidateId: String(candidate.id))
-            
-            let (polling, external, images) = try await (pollingNotesTask, externalNotesTask, candidateImagesTask)
-            pollingNotes = polling
-            externalNotes = external
-            
-            // Convert CandidateImages array to CandidateImage array for UI
-            candidateImages = images.map { image in
-                let imageUrl = "https://s3.us-east-2.amazonaws.com/polling.aethelmearc.org/\(image.awsKey)"
-                print("🖼️ Generated image URL: \(imageUrl)")
-                return CandidateImage(
-                    id: image.imageId,
-                    candidateId: image.candidateId,
-                    imageUrl: imageUrl
-                )
-            }
-            
-            // Reset UI state for new candidate
-            newNoteText = ""
-            isPrivateNote = false
-            showPollingNotes = false
-            showExternalNotes = false
-            
-            // Expand the most recent poll by default
-            if let mostRecent = polling.first?.pollingName {
-                // This will be handled in the view when it loads
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        
-        isLoading = false
-    }
-    
-    // Methods for CandidateDetailView
-    func updateNewNoteText(_ text: String) {
-        newNoteText = text
-    }
-    
-    func toggleIsPrivateNote() {
-        isPrivateNote.toggle()
-    }
-    
-    func addExternalNote() async {
-        guard !newNoteText.isEmpty else { return }
-        
-        guard let selectedCandidate = selectedCandidate else {
-            errorMessage = "No candidate selected"
-            return
-        }
-        
-        do {
-            try await apiService.createExternalNote(candidateId: selectedCandidate.id, note: newNoteText)
-            
-            // Reload external notes to get the updated list
-            let updatedNotes = try await apiService.getExternalNoteByCandidateId(candidateId: selectedCandidate.id)
-            externalNotes = updatedNotes
-            
-            newNoteText = ""
-            isPrivateNote = false
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-    
-    func deleteExternalNote(_ note: ExternalNote) async {
-        do {
-            try await apiService.removeExternalNote(externalNoteId: note.id)
-            
-            // Reload external notes to get the updated list
-            if let selectedCandidate = selectedCandidate {
-                let updatedNotes = try await apiService.getExternalNoteByCandidateId(candidateId: selectedCandidate.id)
-                externalNotes = updatedNotes
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-    }
-    
-    func togglePollingNotesExpanded() {
-        showPollingNotes.toggle()
-    }
-    
-    func toggleExternalNotesExpanded() {
-        showExternalNotes.toggle()
-    }
-    
-    func toggleCandidateWatchlist(_ candidate: Candidate) {
-        // This would typically call an API to toggle watchlist status
-        // For now, we'll just print a message
-        print("Toggle watchlist for candidate: \(candidate.name)")
-    }
-}
+
 
 #Preview {
     CandidatesView()
