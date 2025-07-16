@@ -9,6 +9,7 @@ import SwiftUI
 import Charts
 
 struct ReportView: View {
+    let cardWidth: CGFloat
     @StateObject private var viewModel = ReportViewModel()
     
     var body: some View {
@@ -125,29 +126,16 @@ struct ReportView: View {
                     }
                     .padding(.horizontal, 20)
                 }
-                // Show Notes checkbox
-                if viewModel.candidateReports.contains(where: { $0.hasNotes }) {
-                    HStack {
-                        Button(action: { viewModel.toggleShowNotes() }) {
-                            Image(systemName: viewModel.showNotes ? "checkmark.square" : "square")
-                                .foregroundColor(.appPrimary)
-                        }
-                        Text("Show Notes")
-                            .font(.subheadline)
-                            .foregroundColor(.appText)
-                    }
-                    .padding(.horizontal, 20)
-                }
                 // Candidates Section
                 if !viewModel.candidateReports.isEmpty {
-                    VStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .center, spacing: 24) {
                         Text("Polling Candidate List:")
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.appText)
                             .padding(.horizontal, 20)
                         ForEach(viewModel.candidateReports.sorted(by: { $0.percentage > $1.percentage })) { candidateVM in
-                            CandidateReportCard(candidateVM: candidateVM, showNotes: viewModel.showNotes)
+                            CandidateReportCard(candidateVM: candidateVM, cardWidth: cardWidth)
                         }
                     }
                     .padding(.vertical, 16)
@@ -267,7 +255,6 @@ class ReportViewModel: ObservableObject {
     @Published var closedAvailable: Bool = false
     @Published var showingInProcess: Bool = false // default to false, will set to true if in-process exists
     @Published var candidateReports: [CandidateReportViewModel] = []
-    @Published var showNotes: Bool = true
 
     private let apiService = APIService.shared
 
@@ -311,21 +298,17 @@ class ReportViewModel: ObservableObject {
         do {
             let candidates = try await apiService.getAllCandidates(orderId: orderId)
             var candidateVMs: [CandidateReportViewModel] = []
-            var anyNotes = false
             for candidate in candidates {
                 async let pollingNotes = apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
                 async let externalNotes = apiService.getExternalNoteByCandidateId(candidateId: candidate.id)
                 let (polling, external) = try await (pollingNotes, externalNotes)
                 let vm = CandidateReportViewModel(candidate: candidate, pollingNotes: polling, report: report)
-                if vm.hasNotes { anyNotes = true }
                 candidateVMs.append(vm)
             }
             self.candidateReports = candidateVMs
-            self.showNotes = anyNotes
         } catch {
             print("Failed to fetch candidates or notes: \(error)")
             self.candidateReports = []
-            self.showNotes = false
         }
     }
 
@@ -352,10 +335,6 @@ class ReportViewModel: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-
-    func toggleShowNotes() {
-        showNotes.toggle()
     }
 }
 
@@ -419,7 +398,7 @@ class OrderPickerViewModel: ObservableObject {
 
 struct CandidateReportCard: View {
     let candidateVM: CandidateReportViewModel
-    let showNotes: Bool
+    let cardWidth: CGFloat
     @State private var notesExpanded: Bool = false
     var filteredNotes: [PollingNote] {
         candidateVM.pollingNotes.filter { note in
@@ -452,7 +431,7 @@ struct CandidateReportCard: View {
             Text(voteBreakdownText)
                 .font(.caption)
                 .foregroundColor(.appText.opacity(0.8))
-            if showNotes && candidateVM.hasNotes && !filteredNotes.isEmpty {
+            if !filteredNotes.isEmpty {
                 DisclosureGroup(isExpanded: $notesExpanded) {
                     ForEach(filteredNotes) { note in
                         NoteCard(note: note)
@@ -468,10 +447,12 @@ struct CandidateReportCard: View {
         .padding(16)
         .background(Color.appCardBackground)
         .cornerRadius(12)
-        .padding(.horizontal, 20)
+        .frame(width: cardWidth)
     }
 }
 
 #Preview {
-    ReportView()
+    GeometryReader { geometry in
+        ReportView(cardWidth: geometry.size.width * 0.96)
+    }
 } 

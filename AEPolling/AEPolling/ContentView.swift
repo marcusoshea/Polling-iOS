@@ -52,7 +52,9 @@ struct MainTabView: View {
                         }
                         .tag(NavigationManager.Tab.candidates)
                     
-                    ReportView()
+                    GeometryReader { geometry in
+                        ReportView(cardWidth: geometry.size.width * 0.96)
+                    }
                         .tabItem {
                             Image(systemName: NavigationManager.Tab.reports.icon)
                             Text(NavigationManager.Tab.reports.rawValue)

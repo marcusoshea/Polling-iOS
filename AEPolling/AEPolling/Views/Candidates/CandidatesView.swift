@@ -513,6 +513,12 @@ struct NoteCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if note.isPrivate {
+                Text("--PRIVATE RESPONSE--")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.appError)
+            }
             Text(note.note ?? "No note content")
                 .font(.body)
                 .foregroundColor(.appText)

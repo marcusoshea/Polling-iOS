@@ -73,7 +73,7 @@ struct PollingView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
                         
-                        NavigationLink(destination: ReportView()) {
+                        NavigationLink(destination: GeometryReader { geometry in ReportView(cardWidth: geometry.size.width * 0.96) }) {
                             HStack {
                                 Image(systemName: "chart.bar.doc.horizontal")
                                 Text("View Reports")
