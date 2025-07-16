@@ -86,20 +86,61 @@ struct ReportView: View {
     
     private var reportScrollView: some View {
         ScrollView {
-            HStack {
-                Spacer()
-                LazyVStack(spacing: 24) {
-                    Text("Polling Candidate List:")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                        .foregroundColor(.appText)
-                        .padding(.horizontal, 20)
-                    ForEach(viewModel.candidateReports.sorted(by: { $0.percentage > $1.percentage })) { candidateVM in
-                        CandidateReportCard(candidateVM: candidateVM)
+            VStack(spacing: 16) {
+                // Toggle and report info at the top
+                if viewModel.inProcessAvailable && viewModel.closedAvailable {
+                    Picker("Report Type", selection: $viewModel.showingInProcess) {
+                        Text("In-Process").tag(true)
+                        Text("Closed").tag(false)
                     }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
+                    .onChange(of: viewModel.showingInProcess) { newValue in
+                        Task { await viewModel.toggleReport(to: newValue) }
+                    }
+                } else if viewModel.inProcessAvailable {
+                    Text("In-Process Report")
+                        .font(.headline)
+                        .foregroundColor(.appPrimary)
+                } else if viewModel.closedAvailable {
+                    Text("Closed Report")
+                        .font(.headline)
+                        .foregroundColor(.appPrimary)
                 }
-                .frame(width: 360)
-                Spacer()
+                // Polling name and dates
+                if let report = viewModel.pollingReport {
+                    VStack(spacing: 4) {
+                        if viewModel.showingInProcess {
+                            Text("This in process report for the \(report.polling_order_name) for \(report.polling_name) will run from \(report.start_date) to \(report.end_date)")
+                                .font(.subheadline)
+                                .foregroundColor(.appText)
+                        } else {
+                            Text("This report for the \(report.polling_order_name) for \(report.polling_name) ran from \(report.start_date) to \(report.end_date)")
+                                .font(.subheadline)
+                                .foregroundColor(.appText)
+                        }
+                    }
+                    .padding(16)
+                    .background(Color.appCardBackground)
+                    .cornerRadius(12)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+                }
+                HStack {
+                    Spacer()
+                    LazyVStack(spacing: 24) {
+                        Text("Polling Candidate List:")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.appText)
+                            .padding(.horizontal, 20)
+                        ForEach(viewModel.candidateReports.sorted(by: { $0.percentage > $1.percentage })) { candidateVM in
+                            CandidateReportCard(candidateVM: candidateVM)
+                        }
+                    }
+                    .frame(width: 360)
+                    Spacer()
+                }
             }
             .padding(.vertical, 16)
         }
@@ -250,7 +291,7 @@ class ReportViewModel: ObservableObject {
         }
     }
 
-    func toggleReport() async {
+    func toggleReport(to inProcess: Bool) async {
         guard let user = KeychainService.shared.getUserData(), let orderId = user.pollingOrderId else {
             errorMessage = "No user or polling order found. Please log in again."
             return
@@ -259,17 +300,9 @@ class ReportViewModel: ObservableObject {
         errorMessage = nil
         defer { isLoading = false }
         do {
-            if showingInProcess {
-                // Switch to closed
-                let closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
-                showingInProcess = false
-                await setReportData(from: closedReport, orderId: orderId, inProcess: false)
-            } else {
-                // Switch to in-process
-                let inProcessReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: true)
-                showingInProcess = true
-                await setReportData(from: inProcessReport, orderId: orderId, inProcess: true)
-            }
+            showingInProcess = inProcess
+            let report = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: inProcess)
+            await setReportData(from: report, orderId: orderId, inProcess: inProcess)
         } catch {
             errorMessage = error.localizedDescription
         }
