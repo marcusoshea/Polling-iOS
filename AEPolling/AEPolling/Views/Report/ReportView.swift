@@ -86,82 +86,20 @@ struct ReportView: View {
     
     private var reportScrollView: some View {
         ScrollView {
-            VStack(spacing: 20) {
-                // Toggle at the top
-                if viewModel.inProcessAvailable || viewModel.closedAvailable {
-                    HStack {
-                        if viewModel.closedAvailable {
-                            Button(action: {
-                                Task { await viewModel.toggleReport() }
-                            }) {
-                                Text("Closed Report")
-                                    .fontWeight(!viewModel.showingInProcess ? .bold : .regular)
-                                    .foregroundColor(!viewModel.showingInProcess ? .appPrimary : .appText)
-                            }
-                        }
-                        if viewModel.inProcessAvailable {
-                            Button(action: {
-                                Task { await viewModel.toggleReport() }
-                            }) {
-                                Text("In-Process")
-                                    .fontWeight(viewModel.showingInProcess ? .bold : .regular)
-                                    .foregroundColor(viewModel.showingInProcess ? .appPrimary : .appText)
-                            }
-                        }
+            HStack {
+                Spacer()
+                LazyVStack(spacing: 24) {
+                    Text("Polling Candidate List:")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.appText)
+                        .padding(.horizontal, 20)
+                    ForEach(viewModel.candidateReports.sorted(by: { $0.percentage > $1.percentage })) { candidateVM in
+                        CandidateReportCard(candidateVM: candidateVM)
                     }
-                    .padding(.vertical, 8)
                 }
-                // Header/summary section
-                if let report = viewModel.pollingReport {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(viewModel.showingInProcess ? "This in-process report for the \(report.polling_order_name) polling for \(report.polling_name) will run from \(report.start_date) to \(report.end_date)." : "The most recent closed \(report.polling_order_name) polling was the \(report.polling_name) which ran from \(report.start_date) to \(report.end_date).")
-                            .font(.subheadline)
-                            .foregroundColor(.appText)
-                        if viewModel.showingInProcess {
-                            Text("In-Process Polling Candidate List (NOT FINALIZED):")
-                                .font(.subheadline)
-                                .fontWeight(.bold)
-                                .foregroundColor(.appError)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                }
-                // Candidates Section
-                if !viewModel.candidateReports.isEmpty {
-                    VStack(alignment: .center, spacing: 24) {
-                        Text("Polling Candidate List:")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.appText)
-                            .padding(.horizontal, 20)
-                        ForEach(viewModel.candidateReports.sorted(by: { $0.percentage > $1.percentage })) { candidateVM in
-                            CandidateReportCard(candidateVM: candidateVM, cardWidth: cardWidth)
-                        }
-                    }
-                    .padding(.vertical, 16)
-                }
-                // Recent Activity Card
-                if !viewModel.recentNotes.isEmpty {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text("Recent Activity")
-                            .font(.headline)
-                            .foregroundColor(.appText)
-                            .padding(.horizontal, 20)
-                        VStack(spacing: 0) {
-                            ForEach(viewModel.recentNotes.prefix(5), id: \ .id) { note in
-                                ActivityRow(activity: note)
-                                if note.id != viewModel.recentNotes.prefix(5).last?.id {
-                                    Divider()
-                                        .padding(.horizontal, 20)
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 20)
-                    .background(Color.appCardBackground)
-                    .cornerRadius(16)
-                    .padding(.horizontal, 20)
-                }
+                .frame(width: 360)
+                Spacer()
             }
             .padding(.vertical, 16)
         }
@@ -398,7 +336,6 @@ class OrderPickerViewModel: ObservableObject {
 
 struct CandidateReportCard: View {
     let candidateVM: CandidateReportViewModel
-    let cardWidth: CGFloat
     @State private var notesExpanded: Bool = false
     var filteredNotes: [PollingNote] {
         candidateVM.pollingNotes.filter { note in
@@ -447,7 +384,6 @@ struct CandidateReportCard: View {
         .padding(16)
         .background(Color.appCardBackground)
         .cornerRadius(12)
-        .frame(width: cardWidth)
     }
 }
 
