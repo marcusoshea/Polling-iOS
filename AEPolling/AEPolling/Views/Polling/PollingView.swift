@@ -9,6 +9,7 @@ import SwiftUI
 
 struct PollingView: View {
     @StateObject private var viewModel = PollingViewModel()
+    @EnvironmentObject var navigationManager: NavigationManager
     private let userId: Int? = KeychainService.shared.getUserData()?.id
     
     var body: some View {
@@ -73,7 +74,10 @@ struct PollingView: View {
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 20)
                         
-                        NavigationLink(destination: GeometryReader { geometry in ReportView(cardWidth: geometry.size.width * 0.96) }) {
+                        Button(action: {
+                            // Navigate to the Reports tab instead of pushing a new view
+                            navigationManager.selectedTab = .reports
+                        }) {
                             HStack {
                                 Image(systemName: "chart.bar.doc.horizontal")
                                 Text("View Reports")
@@ -533,7 +537,8 @@ struct CandidateNotesModal: View {
                                                 text: note.note ?? "No note content",
                                                 author: note.name,
                                                 timestamp: note.createdAt,
-                                                pollTitle: note.pollingName
+                                                pollTitle: note.pollingName,
+                                                isPrivate: note.isPrivate
                                             )
                                         }
                                     )
@@ -549,7 +554,8 @@ struct CandidateNotesModal: View {
                                             text: note.text,
                                             author: note.pollingOrderMemberId.name,
                                             timestamp: note.timestamp,
-                                            pollTitle: nil
+                                            pollTitle: nil,
+                                            isPrivate: false
                                         )
                                     }
                                 )
@@ -674,6 +680,12 @@ struct CandidateNoteCard: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+            if note.isPrivate {
+                Text("--PRIVATE RESPONSE--")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(.appError)
+            }
             Text(note.text)
                 .font(.body)
                 .foregroundColor(.appText)

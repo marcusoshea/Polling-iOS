@@ -43,10 +43,7 @@ struct ProfileView: View {
                     VStack(spacing: 12) {
                         ProfileInfoRow(title: "Name", value: authManager.currentUser?.fullName ?? "N/A")
                         ProfileInfoRow(title: "Email", value: authManager.currentUser?.email ?? "N/A")
-                        ProfileInfoRow(title: "User ID", value: "\(authManager.currentUser?.id ?? 0)")
-                        if let pollingOrderId = authManager.currentUser?.pollingOrderId {
-                            ProfileInfoRow(title: "Polling Order", value: "\(pollingOrderId)")
-                        }
+                      
                     }
                     .padding(.horizontal, 20)
                 }

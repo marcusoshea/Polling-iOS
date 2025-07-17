@@ -23,6 +23,46 @@ struct ContentView: View {
     }
 }
 
+struct LogoutScreen: View {
+    @EnvironmentObject var authManager: AuthenticationManager
+    @State private var showingLogoutAlert = false
+    var body: some View {
+        VStack(spacing: 32) {
+            Spacer()
+            Image(systemName: "rectangle.portrait.and.arrow.right")
+                .font(.system(size: 60))
+                .foregroundColor(.appError)
+            Text("Are you sure you want to sign out?")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.appText)
+                .multilineTextAlignment(.center)
+            Button(action: { showingLogoutAlert = true }) {
+                Text("Sign Out")
+                    .fontWeight(.bold)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.appError)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding(.horizontal, 40)
+            .alert("Sign Out", isPresented: $showingLogoutAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Sign Out", role: .destructive) {
+                    authManager.signOut()
+                }
+            } message: {
+                Text("Are you sure you want to sign out?")
+            }
+            Spacer()
+        }
+        .background(Color.appBackground)
+        .navigationTitle("Logout")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
 struct MainTabView: View {
     @EnvironmentObject var navigationManager: NavigationManager
     @EnvironmentObject var authManager: AuthenticationManager
@@ -72,6 +112,12 @@ struct MainTabView: View {
                             Text(NavigationManager.Tab.feedback.rawValue)
                         }
                         .tag(NavigationManager.Tab.feedback)
+                    LogoutScreen()
+                        .tabItem {
+                            Image(systemName: "ellipsis")
+                            Text("Logout")
+                        }
+                        .tag("more")
                 }
                 .accentColor(.appPrimary)
                 
@@ -130,13 +176,7 @@ struct SideMenuView: View {
                         Divider()
                             .padding(.vertical, 10)
                         
-                        SideMenuButton(
-                            title: "Sign Out",
-                            icon: "rectangle.portrait.and.arrow.right",
-                            isSelected: false
-                        ) {
-                            authManager.signOut()
-                        }
+                        // Removed duplicate Sign Out button here
                     }
                 }
                 .padding(.horizontal, 20)

@@ -11,6 +11,7 @@ import Charts
 struct ReportView: View {
     let cardWidth: CGFloat
     @StateObject private var viewModel = ReportViewModel()
+    @State private var expandedCandidates: [Int: Bool] = [:] // Track expansion state per candidate
     
     var body: some View {
         NavigationView {
@@ -110,12 +111,14 @@ struct ReportView: View {
                 // Polling name and dates
                 if let report = viewModel.pollingReport {
                     VStack(spacing: 4) {
+                        let formattedStart = formatDate(report.start_date)
+                        let formattedEnd = formatDate(report.end_date)
                         if viewModel.showingInProcess {
-                            Text("This in process report for the \(report.polling_order_name) for \(report.polling_name) will run from \(report.start_date) to \(report.end_date)")
+                            Text("This in process report for the \(report.polling_order_name) for \(report.polling_name) will run from \(formattedStart) to \(formattedEnd)")
                                 .font(.subheadline)
                                 .foregroundColor(.appText)
                         } else {
-                            Text("This report for the \(report.polling_order_name) for \(report.polling_name) ran from \(report.start_date) to \(report.end_date)")
+                            Text("This report for the \(report.polling_order_name) for \(report.polling_name) ran from \(formattedStart) to \(formattedEnd)")
                                 .font(.subheadline)
                                 .foregroundColor(.appText)
                         }
@@ -135,7 +138,13 @@ struct ReportView: View {
                             .foregroundColor(.appText)
                             .padding(.horizontal, 20)
                         ForEach(viewModel.candidateReports.sorted(by: { $0.percentage > $1.percentage })) { candidateVM in
-                            CandidateReportCard(candidateVM: candidateVM)
+                            CandidateReportCard(
+                                candidateVM: candidateVM,
+                                notesExpanded: Binding(
+                                    get: { expandedCandidates[candidateVM.id] ?? false },
+                                    set: { expandedCandidates[candidateVM.id] = $0 }
+                                )
+                            )
                         }
                     }
                     .frame(width: 360)
@@ -145,6 +154,18 @@ struct ReportView: View {
             .padding(.vertical, 16)
         }
     }
+}
+
+private func formatDate(_ isoString: String) -> String {
+    let isoFormatter = ISO8601DateFormatter()
+    isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = isoFormatter.date(from: isoString) ?? ISO8601DateFormatter().date(from: isoString) {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .none
+        return formatter.string(from: date)
+    }
+    return isoString
 }
 
 struct SummaryCard: View {
@@ -245,25 +266,44 @@ class ReportViewModel: ObservableObject {
             errorMessage = "No user or polling order found. Please log in again."
             return
         }
+        var inProcessReport: PollingReportResponse? = nil
+        var closedReport: PollingReportResponse? = nil
+        var inProcessError: Error? = nil
+        var closedError: Error? = nil
+        // Try in-process report first
+        print("[ReportViewModel] Requesting in-process report for orderId: \(orderId)")
         do {
-            // Check for in-process report first
-            let inProcessReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: true)
+            inProcessReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: true)
             inProcessAvailable = inProcessReport != nil
-            // Check for closed report
-            let closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
-            closedAvailable = closedReport != nil
-            // Default to in-process if available
-            if inProcessAvailable {
-                showingInProcess = true
-                await setReportData(from: inProcessReport, orderId: orderId, inProcess: true)
-            } else if closedAvailable {
-                showingInProcess = false
-                await setReportData(from: closedReport, orderId: orderId, inProcess: false)
-            } else {
-                errorMessage = "No report data available."
-            }
+            print("[ReportViewModel] In-process report available: \(inProcessAvailable)")
         } catch {
-            errorMessage = error.localizedDescription
+            inProcessAvailable = false
+            inProcessError = error
+            print("[ReportViewModel] In-process report error: \(error.localizedDescription)")
+        }
+        // If no in-process, try closed report
+        if !inProcessAvailable {
+            print("[ReportViewModel] Requesting closed report for orderId: \(orderId)")
+            do {
+                closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
+                closedAvailable = closedReport != nil
+                print("[ReportViewModel] Closed report available: \(closedAvailable)")
+            } catch {
+                closedAvailable = false
+                closedError = error
+                print("[ReportViewModel] Closed report error: \(error.localizedDescription)")
+            }
+        }
+        // Show whichever is available
+        if inProcessAvailable, let report = inProcessReport {
+            showingInProcess = true
+            await setReportData(from: report, orderId: orderId, inProcess: true)
+        } else if closedAvailable, let report = closedReport {
+            showingInProcess = false
+            await setReportData(from: report, orderId: orderId, inProcess: false)
+        } else {
+            print("[ReportViewModel] No report data available for orderId: \(orderId)")
+            errorMessage = inProcessError?.localizedDescription ?? closedError?.localizedDescription ?? "No report data available."
         }
     }
 
@@ -275,15 +315,25 @@ class ReportViewModel: ObservableObject {
         totalVotes = Int(memberParticipation) ?? 0
         candidateCount = Int(activeMembers) ?? 0
         do {
-            let candidates = try await apiService.getAllCandidates(orderId: orderId)
+            // Fetch all candidates for the order
+            let allCandidates = try await apiService.getAllCandidates(orderId: report.polling_order_id)
+            print("📊 [ReportViewModel] Found \(allCandidates.count) total candidates")
             var candidateVMs: [CandidateReportViewModel] = []
-            for candidate in candidates {
-                async let pollingNotes = apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
-                async let externalNotes = apiService.getExternalNoteByCandidateId(candidateId: candidate.id)
-                let (polling, external) = try await (pollingNotes, externalNotes)
-                let vm = CandidateReportViewModel(candidate: candidate, pollingNotes: polling, report: report)
-                candidateVMs.append(vm)
+            for candidate in allCandidates {
+                // Fetch all notes for this candidate
+                let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
+                // Filter notes for this polling
+                let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
+                
+
+                
+                // Add candidate if they have any notes for this polling (including null notes)
+                if !notesForPolling.isEmpty {
+                    let vm = CandidateReportViewModel(candidate: candidate, pollingNotes: notesForPolling, report: report)
+                    candidateVMs.append(vm)
+                }
             }
+            print("📊 [ReportViewModel] Created \(candidateVMs.count) candidate VMs with notes")
             self.candidateReports = candidateVMs
         } catch {
             print("Failed to fetch candidates or notes: \(error)")
@@ -369,15 +419,16 @@ class OrderPickerViewModel: ObservableObject {
 
 struct CandidateReportCard: View {
     let candidateVM: CandidateReportViewModel
-    @State private var notesExpanded: Bool = false
+    @Binding var notesExpanded: Bool
     var filteredNotes: [PollingNote] {
-        candidateVM.pollingNotes.filter { note in
+        let filtered = candidateVM.pollingNotes.filter { note in
             if let text = note.note {
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return !trimmed.isEmpty && trimmed.lowercased() != "no note content"
             }
             return false
         }
+        return filtered
     }
     private var voteBreakdownText: String {
         var parts: [String] = []
@@ -401,10 +452,19 @@ struct CandidateReportCard: View {
             Text(voteBreakdownText)
                 .font(.caption)
                 .foregroundColor(.appText.opacity(0.8))
-            if !filteredNotes.isEmpty {
+            
+            // Always show notes section for candidates with any notes
+            if !candidateVM.pollingNotes.isEmpty {
                 DisclosureGroup(isExpanded: $notesExpanded) {
-                    ForEach(filteredNotes) { note in
-                        NoteCard(note: note)
+                    if !filteredNotes.isEmpty {
+                        ForEach(filteredNotes, id: \.id) { note in
+                            NoteCard(note: note)
+                        }
+                    } else {
+                        Text("No notes available for this candidate.")
+                            .font(.subheadline)
+                            .foregroundColor(.appText.opacity(0.7))
+                            .padding(.vertical, 8)
                     }
                 } label: {
                     Text("Notes")

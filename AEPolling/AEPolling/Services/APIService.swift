@@ -59,7 +59,7 @@ class APIService {
     
     // MARK: - Authentication Endpoints
     
-    func login(email: String, password: String, pollingOrderId: Int) async throws -> PollingOrderMember {
+    func login(email: String, password: String, pollingOrderId: Int) async throws -> LoginResponse {
         let loginRequest = LoginRequest(email: email, password: password, pollingOrderId: pollingOrderId)
         return try await post(endpoint: "/member/login", body: loginRequest)
     }
@@ -168,6 +168,12 @@ class APIService {
     
     func getAllPollingNotesById(pollingNotesId: String) async throws -> [PollingNote] {
         let body = ["polling_notes_id": pollingNotesId]
+        return try await post(endpoint: "/pollingnote/all", body: body)
+    }
+    
+    func getAllPollingNotesForReport() async throws -> [PollingNote] {
+        // The /pollingnote/all endpoint expects a POST with an empty body or as required
+        let body: [String: String] = [:]
         return try await post(endpoint: "/pollingnote/all", body: body)
     }
     

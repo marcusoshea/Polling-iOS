@@ -106,10 +106,10 @@ struct PollingNote: Codable, Identifiable {
     let candidateId: Int
     let pollingCandidateId: Int
     let name: String
-    let link: String
+    let link: String?
     let watchList: Bool
     let note: String?
-    let vote: Int
+    let vote: Int?
     let createdAt: String
     let pollingOrderMemberId: Int
     let completed: Bool
@@ -278,13 +278,16 @@ struct PollingReportResponse {
 
     // Custom initializer for mixed array response
     init(from array: [Any]) throws {
+        guard !array.isEmpty else {
+            throw NSError(domain: "Decoding", code: 0, userInfo: [NSLocalizedDescriptionKey: "No report data available for this polling order."])
+        }
         guard let reportDict = array.first as? [String: Any],
               let reportData = try? JSONSerialization.data(withJSONObject: reportDict),
               let report = try? JSONDecoder().decode(PollingReport.self, from: reportData) else {
-            throw NSError(domain: "Decoding", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid report object"])
+            throw NSError(domain: "Decoding", code: 0, userInfo: [NSLocalizedDescriptionKey: "Invalid or missing report object for this polling order."])
         }
-        let activeMembers = (array.count > 1 ? (array[1] as? [String: String])? ["active_members"] : nil) ?? ""
-        let memberParticipation = (array.count > 2 ? (array[2] as? [String: String])? ["member_participation"] : nil) ?? ""
+        let activeMembers = (array.count > 1 ? (array[1] as? [String: String])?["active_members"] : nil) ?? ""
+        let memberParticipation = (array.count > 2 ? (array[2] as? [String: String])?["member_participation"] : nil) ?? ""
         self.report = report
         self.activeMembers = activeMembers
         self.memberParticipation = memberParticipation
@@ -461,6 +464,7 @@ struct NoteItem: Identifiable {
     let author: String
     let timestamp: String
     let pollTitle: String?
+    let isPrivate: Bool
 } 
 
 // Move cleanHtmlText here for use in CandidateImage
@@ -470,4 +474,24 @@ fileprivate func cleanHtmlText(_ htmlString: String) -> String {
         return attributedString.string
     }
     return htmlString
+} 
+
+struct LoginResponse: Codable {
+    let accessToken: String
+    let isOrderAdmin: Bool
+    let pollingOrder: Int
+    let memberId: Int
+    let name: String
+    let email: String
+    let active: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case accessToken = "access_token"
+        case isOrderAdmin
+        case pollingOrder
+        case memberId
+        case name
+        case email
+        case active
+    }
 } 

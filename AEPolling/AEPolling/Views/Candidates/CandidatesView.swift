@@ -14,11 +14,28 @@ struct CandidatesView: View {
     var body: some View {
         NavigationView {
             VStack {
+                // Search and filter controls
+                HStack(spacing: 12) {
+                    TextField("Search candidates...", text: $viewModel.searchText)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .padding(.vertical, 8)
+                    Button(action: { viewModel.showWatchlistOnly.toggle() }) {
+                        Text(viewModel.showWatchlistOnly ? "View All" : "Watchlist Only")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .background(Color.appCardBackground)
+                            .cornerRadius(20)
+                    }
+                }
+                .padding(.horizontal, 20)
                 if viewModel.isLoading {
                     loadingView
                 } else if let errorMessage = viewModel.errorMessage {
                     errorView(errorMessage)
-                } else if viewModel.candidates.isEmpty {
+                } else if viewModel.filteredCandidates.isEmpty {
                     emptyView
                 } else {
                     candidatesListView
@@ -113,7 +130,7 @@ struct CandidatesView: View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 0) {
                 VStack(spacing: 16) {
-                    ForEach(viewModel.candidates) { candidate in
+                    ForEach(viewModel.filteredCandidates) { candidate in
                         Button(action: {
                             showingCandidateDetail = true
                             Task {
@@ -139,7 +156,7 @@ struct CandidatesView: View {
                             .padding(.vertical, 12)
                         }
                         .buttonStyle(PlainButtonStyle())
-                        if candidate.id != viewModel.candidates.last?.id {
+                        if candidate.id != viewModel.filteredCandidates.last?.id {
                             Divider()
                         }
                     }
@@ -344,7 +361,8 @@ struct CandidateDetailView: View {
                                 text: note.note ?? "",
                                 author: note.name,
                                 timestamp: note.createdAt,
-                                pollTitle: note.pollingName
+                                pollTitle: note.pollingName,
+                                isPrivate: note.isPrivate
                             )
                         }
                     )

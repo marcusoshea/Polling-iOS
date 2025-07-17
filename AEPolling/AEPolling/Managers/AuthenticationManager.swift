@@ -38,26 +38,22 @@ class AuthenticationManager: ObservableObject {
         errorMessage = nil
         
         do {
-            let pollingOrderMember: PollingOrderMember = try await apiService.login(email: email, password: password, pollingOrderId: pollingOrderId)
-            
-            // Note: The login API response doesn't include accessToken, so we'll need to handle this differently
-            // For now, we'll assume the token is stored separately or the login process handles token storage
-            
-            // Create a User object from PollingOrderMember for compatibility
+            let loginResponse: LoginResponse = try await apiService.login(email: email, password: password, pollingOrderId: pollingOrderId)
+            // Save token if needed: keychainService.saveAuthToken(loginResponse.accessToken)
             let user = User(
-                id: pollingOrderMember.id,
-                email: pollingOrderMember.email,
-                firstName: pollingOrderMember.name.components(separatedBy: " ").first ?? "",
-                lastName: pollingOrderMember.name.components(separatedBy: " ").dropFirst().joined(separator: " "),
-                pollingOrderId: pollingOrderId // Use the passed pollingOrderId since it's not in the response
+                id: loginResponse.memberId,
+                email: loginResponse.email,
+                firstName: loginResponse.name.components(separatedBy: " ").first ?? "",
+                lastName: loginResponse.name.components(separatedBy: " ").dropFirst().joined(separator: " "),
+                pollingOrderId: loginResponse.pollingOrder
             )
             keychainService.saveUserData(user)
-            
+            keychainService.saveAuthToken(loginResponse.accessToken)
             self.currentUser = user
             self.isAuthenticated = true
             self.isLoading = false
             return true
-            
+        
         } catch {
             self.errorMessage = error.localizedDescription
             self.isLoading = false

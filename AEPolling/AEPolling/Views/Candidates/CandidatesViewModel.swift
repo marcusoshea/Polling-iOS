@@ -14,6 +14,16 @@ class CandidatesViewModel: ObservableObject {
     @Published var errorMessage: String?
     @Published var selectedCandidate: Candidate?
     
+    // Search and filter
+    @Published var searchText: String = ""
+    @Published var showWatchlistOnly: Bool = false
+    var filteredCandidates: [Candidate] {
+        candidates.filter { candidate in
+            (searchText.isEmpty || candidate.name.lowercased().contains(searchText.lowercased())) &&
+            (!showWatchlistOnly || (candidate.watchList ?? false))
+        }
+    }
+    
     // Properties for CandidateDetailView
     @Published var pollingNotes: [PollingNote] = []
     @Published var externalNotes: [ExternalNote] = []
