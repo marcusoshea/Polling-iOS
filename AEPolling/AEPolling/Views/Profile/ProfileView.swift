@@ -10,6 +10,7 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @State private var showingLogoutAlert = false
+    @State private var showingChangePassword = false
     
     var body: some View {
         NavigationView {
@@ -61,7 +62,7 @@ struct ProfileView: View {
                     
                     VStack(spacing: 0) {
                         Button(action: {
-                            // Change password action
+                            showingChangePassword = true
                         }) {
                             HStack {
                                 Image(systemName: "lock")
@@ -112,6 +113,10 @@ struct ProfileView: View {
                 }
             } message: {
                 Text("Are you sure you want to sign out?")
+            }
+            .sheet(isPresented: $showingChangePassword) {
+                ChangePasswordView()
+                    .environmentObject(authManager)
             }
         }
     }

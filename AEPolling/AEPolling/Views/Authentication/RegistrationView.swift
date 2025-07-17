@@ -11,34 +11,49 @@ struct RegistrationView: View {
     @EnvironmentObject var authManager: AuthenticationManager
     @Environment(\.dismiss) private var dismiss
     
+    @State private var name = ""
     @State private var email = ""
     @State private var password = ""
-    @State private var confirmPassword = ""
-    @State private var firstName = ""
-    @State private var lastName = ""
     @State private var showingPassword = false
-    @State private var showingConfirmPassword = false
+    @State private var pollingOrders: [PollingOrder] = []
+    @State private var selectedPollingOrder: PollingOrder? = nil
+    @State private var isLoadingOrders = false
     @FocusState private var focusedField: Field?
-    
+
     enum Field {
-        case email, password, confirmPassword, firstName, lastName
+        case name, email, password
     }
-    
+
     private var isFormValid: Bool {
-        !email.isEmpty && 
-        !password.isEmpty && 
-        !confirmPassword.isEmpty && 
-        !firstName.isEmpty && 
-        !lastName.isEmpty && 
-        password == confirmPassword &&
+        !name.isEmpty &&
+        !email.isEmpty &&
+        !password.isEmpty &&
         password.count >= 8 &&
-        email.contains("@")
+        email.contains("@") &&
+        selectedPollingOrder != nil
     }
     
     var body: some View {
         NavigationView {
             ScrollView {
                 VStack(spacing: 30) {
+                    // Success Dialog
+                    if authManager.showRegistrationSuccess, let message = authManager.registrationSuccessMessage {
+                        VStack {
+                            Text(message)
+                                .multilineTextAlignment(.center)
+                                .padding()
+                            Button("OK") {
+                                authManager.showRegistrationSuccess = false
+                                dismiss()
+                            }
+                            .padding(.top, 8)
+                        }
+                        .background(Color(.systemBackground))
+                        .cornerRadius(12)
+                        .shadow(radius: 10)
+                        .padding()
+                    }
                     // Header
                     VStack(spacing: 16) {
                         Image(systemName: "person.badge.plus")
@@ -57,29 +72,15 @@ struct RegistrationView: View {
                     
                     // Registration Form
                     VStack(spacing: 20) {
-                        // Name Fields
-                        HStack(spacing: 16) {
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("First Name")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                
-                                TextField("First name", text: $firstName)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    .textContentType(.givenName)
-                                    .focused($focusedField, equals: .firstName)
-                            }
-                            
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Last Name")
-                                    .font(.headline)
-                                    .foregroundColor(.primary)
-                                
-                                TextField("Last name", text: $lastName)
-                                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                                    .textContentType(.familyName)
-                                    .focused($focusedField, equals: .lastName)
-                            }
+                        // Name Field
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Name")
+                                .font(.headline)
+                                .foregroundColor(.primary)
+                            TextField("Enter your name", text: $name)
+                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                .textContentType(.name)
+                                .focused($focusedField, equals: .name)
                         }
                         
                         // Email Field
@@ -126,34 +127,33 @@ struct RegistrationView: View {
                             }
                         }
                         
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Confirm Password")
-                                .font(.headline)
-                                .foregroundColor(.primary)
-                            
-                            HStack {
-                                if showingConfirmPassword {
-                                    TextField("Confirm your password", text: $confirmPassword)
-                                        .textContentType(.newPassword)
-                                } else {
-                                    SecureField("Confirm your password", text: $confirmPassword)
-                                        .textContentType(.newPassword)
+                    // Polling Order Dropdown
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Polling Order")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        if isLoadingOrders {
+                            ProgressView()
+                        } else {
+                            Menu {
+                                ForEach(pollingOrders, id: \ .id) { order in
+                                    Button(order.name) {
+                                        selectedPollingOrder = order
+                                    }
                                 }
-                                
-                                Button(action: { showingConfirmPassword.toggle() }) {
-                                    Image(systemName: showingConfirmPassword ? "eye.slash" : "eye")
-                                        .foregroundColor(.secondary)
+                            } label: {
+                                HStack {
+                                    Text(selectedPollingOrder?.name ?? "Select Polling Order")
+                                        .foregroundColor(selectedPollingOrder == nil ? .secondary : .primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.down")
                                 }
-                            }
-                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                            .focused($focusedField, equals: .confirmPassword)
-                            
-                            if !confirmPassword.isEmpty && password != confirmPassword {
-                                Text("Passwords do not match")
-                                    .font(.caption)
-                                    .foregroundColor(.red)
+                                .padding()
+                                .background(Color(.systemGray6))
+                                .cornerRadius(8)
                             }
                         }
+                    }
                         
                         if let errorMessage = authManager.errorMessage {
                             Text(errorMessage)
@@ -169,7 +169,7 @@ struct RegistrationView: View {
                                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                                         .scaleEffect(0.8)
                                 } else {
-                                    Text("Create Account")
+                                    Text("Register")
                                         .fontWeight(.semibold)
                                 }
                             }
@@ -195,22 +195,32 @@ struct RegistrationView: View {
                     }
                 }
             }
+            .task {
+                await loadPollingOrders()
+            }
         }
     }
     
     private func register() {
+        guard let selectedOrder = selectedPollingOrder else { return }
         Task {
             let success = await authManager.register(
+                name: name,
                 email: email,
                 password: password,
-                firstName: firstName,
-                lastName: lastName
+                pollingOrderId: selectedOrder.id
             )
-            
-            if success {
-                dismiss()
-            }
         }
+    }
+
+    private func loadPollingOrders() async {
+        isLoadingOrders = true
+        do {
+            pollingOrders = try await APIService.shared.fetchPollingOrders()
+        } catch {
+            // handle error if needed
+        }
+        isLoadingOrders = false
     }
 }
 

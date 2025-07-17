@@ -9,10 +9,23 @@ import SwiftUI
 
 struct FeedbackView: View {
     @StateObject private var viewModel = FeedbackViewModel()
-    @State private var name = ""
-    @State private var email = ""
     @State private var message = ""
     @State private var showingSuccessAlert = false
+    @State private var showingErrorAlert = false
+    @State private var errorMessage = ""
+    
+    // Get user info from keychain
+    private var userData: User? {
+        KeychainService.shared.getUserData()
+    }
+    
+    private var userName: String {
+        userData?.fullName ?? "Unknown User"
+    }
+    
+    private var userEmail: String {
+        userData?.email ?? "unknown@email.com"
+    }
     
     var body: some View {
         NavigationView {
@@ -31,153 +44,9 @@ struct FeedbackView: View {
                 } else {
                     ScrollView {
                         VStack(spacing: 24) {
-                            // Header Card
-                            VStack(spacing: 16) {
-                                Image(systemName: "message.circle.fill")
-                                    .font(.system(size: 60))
-                                    .foregroundColor(.appGold)
-                                
-                                VStack(spacing: 8) {
-                                    Text("Send Feedback")
-                                        .font(.title2)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.white)
-                                    
-                                    Text("We'd love to hear from you! Share your thoughts, suggestions, or report any issues.")
-                                        .font(.body)
-                                        .foregroundColor(.white.opacity(0.8))
-                                        .multilineTextAlignment(.center)
-                                }
-                            }
-                            .padding(24)
-                            .background(Color.appCardBackground)
-                            .cornerRadius(16)
-                            .padding(.horizontal, 20)
-                            
-                            // Feedback Form Card
-                            VStack(alignment: .leading, spacing: 20) {
-                                Text("Feedback Form")
-                                    .font(.headline)
-                                    .foregroundColor(.appText)
-                                    .padding(.horizontal, 20)
-                                
-                                VStack(spacing: 16) {
-                                    // Name Field
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Name")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.appText)
-                                        
-                                        TextField("Enter your name", text: $name)
-                                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                                            .background(Color.appBackground)
-                                            .cornerRadius(8)
-                                    }
-                                    
-                                    // Email Field
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Email")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.appText)
-                                        
-                                        TextField("Enter your email", text: $email)
-                                            .textFieldStyle(RoundedBorderTextFieldStyle())
-                                            .keyboardType(.emailAddress)
-                                            .autocapitalization(.none)
-                                            .background(Color.appBackground)
-                                            .cornerRadius(8)
-                                    }
-                                    
-                                    // Message Field
-                                    VStack(alignment: .leading, spacing: 8) {
-                                        Text("Message")
-                                            .font(.subheadline)
-                                            .fontWeight(.medium)
-                                            .foregroundColor(.appText)
-                                        
-                                        TextEditor(text: $message)
-                                            .frame(minHeight: 120)
-                                            .padding(8)
-                                            .background(Color.appBackground)
-                                            .cornerRadius(8)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 8)
-                                                    .stroke(Color.appText.opacity(0.3), lineWidth: 1)
-                                            )
-                                    }
-                                    
-                                    // Error Message
-                                    if let errorMessage = viewModel.errorMessage {
-                                        Text(errorMessage)
-                                            .font(.caption)
-                                            .foregroundColor(.appError)
-                                            .multilineTextAlignment(.center)
-                                    }
-                                    
-                                    // Submit Button
-                                    Button(action: submitFeedback) {
-                                        HStack {
-                                            if viewModel.isLoading {
-                                                ProgressView()
-                                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                                                    .scaleEffect(0.8)
-                                            } else {
-                                                Text("Submit Feedback")
-                                                    .fontWeight(.semibold)
-                                            }
-                                        }
-                                        .frame(maxWidth: .infinity)
-                                        .padding()
-                                        .background(Color.appSecondary)
-                                        .foregroundColor(.white)
-                                        .cornerRadius(10)
-                                    }
-                                    .disabled(viewModel.isLoading || name.isEmpty || email.isEmpty || message.isEmpty)
-                                    .opacity(viewModel.isLoading || name.isEmpty || email.isEmpty || message.isEmpty ? 0.6 : 1.0)
-                                }
-                                .padding(.horizontal, 20)
-                            }
-                            .padding(.vertical, 20)
-                            .background(Color.appCardBackground)
-                            .cornerRadius(16)
-                            .padding(.horizontal, 20)
-                            
-                            // Contact Information Card
-                            VStack(alignment: .leading, spacing: 16) {
-                                Text("Other Ways to Contact")
-                                    .font(.headline)
-                                    .foregroundColor(.appText)
-                                    .padding(.horizontal, 20)
-                                
-                                VStack(spacing: 12) {
-                                    ContactRow(
-                                        icon: "envelope",
-                                        title: "Email Support",
-                                        subtitle: "support@aepolling.com",
-                                        action: {
-                                            // Open email app
-                                        }
-                                    )
-                                    
-                                    Divider()
-                                        .padding(.horizontal, 20)
-                                    
-                                    ContactRow(
-                                        icon: "phone",
-                                        title: "Phone Support",
-                                        subtitle: "+1 (555) 123-4567",
-                                        action: {
-                                            // Open phone app
-                                        }
-                                    )
-                                }
-                            }
-                            .padding(.vertical, 20)
-                            .background(Color.appCardBackground)
-                            .cornerRadius(16)
-                            .padding(.horizontal, 20)
+                            FeedbackHeader()
+                            UserInfoCard(userName: userName, userEmail: userEmail)
+                            MessageInputCard(message: $message, errorMessage: $errorMessage, isLoading: viewModel.isLoading, submitAction: submitFeedback)
                         }
                         .padding(.vertical, 16)
                     }
@@ -190,61 +59,149 @@ struct FeedbackView: View {
             .alert("Feedback Submitted", isPresented: $showingSuccessAlert) {
                 Button("OK") {
                     // Reset form
-                    name = ""
-                    email = ""
                     message = ""
+                    errorMessage = ""
                 }
             } message: {
                 Text("Thank you for your feedback! We'll review it and get back to you soon.")
+            }
+            .alert("Error", isPresented: $showingErrorAlert) {
+                Button("OK") { }
+            } message: {
+                Text(errorMessage)
             }
         }
     }
     
     private func submitFeedback() {
+        // Clear previous error
+        errorMessage = ""
+        
+        // Validate message
+        let trimmedMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmedMessage.isEmpty {
+            errorMessage = "Please enter your feedback message"
+            return
+        }
+        
         Task {
-            let success = await viewModel.submitFeedback(name: name, email: email, message: message)
+            // Add "IPHONE" to the message body
+            let messageWithPlatform = "\(trimmedMessage)\n\nIPHONE"
+            
+            let success = await viewModel.submitFeedback(
+                name: userName,
+                email: userEmail,
+                message: messageWithPlatform
+            )
+            
             if success {
                 showingSuccessAlert = true
+            } else {
+                errorMessage = viewModel.errorMessage ?? "Failed to submit feedback. Please try again."
+                showingErrorAlert = true
             }
         }
     }
 }
 
-struct ContactRow: View {
-    let icon: String
-    let title: String
-    let subtitle: String
-    let action: () -> Void
-    
+private struct FeedbackHeader: View {
     var body: some View {
-        Button(action: action) {
-            HStack(spacing: 12) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(.appGold)
-                    .frame(width: 24, height: 24)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .foregroundColor(.appText)
-                    
-                    Text(subtitle)
-                        .font(.caption)
-                        .foregroundColor(.appText.opacity(0.7))
-                }
-                
-                Spacer()
-                
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundColor(.appText.opacity(0.6))
+        VStack(spacing: 16) {
+            Image(systemName: "message.circle.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.appGold)
+            VStack(spacing: 8) {
+                Text("App Feedback")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.black)
+                Text("Note: this form is NOT for candidate feedback.")
+                    .font(.body)
+                    .italic()
+                    .foregroundColor(.black.opacity(0.8))
+                    .multilineTextAlignment(.center)
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
         }
-        .buttonStyle(PlainButtonStyle())
+        .padding(24)
+        .background(Color.appCardBackground)
+        .cornerRadius(16)
+        .padding(.horizontal, 20)
+    }
+}
+
+private struct UserInfoCard: View {
+    let userName: String
+    let userEmail: String
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Feedback from:")
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundColor(.appText)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(userName)
+                    .font(.body)
+                    .foregroundColor(.appText)
+                Text(userEmail)
+                    .font(.subheadline)
+                    .foregroundColor(.appText.opacity(0.8))
+            }
+        }
+        .padding(16)
+        .background(Color.appCardBackground)
+        .cornerRadius(12)
+        .padding(.horizontal, 20)
+    }
+}
+
+private struct MessageInputCard: View {
+    @Binding var message: String
+    @Binding var errorMessage: String
+    let isLoading: Bool
+    let submitAction: () -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Your Message")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.appText)
+            TextEditor(text: $message)
+                .frame(minHeight: 150)
+                .padding(12)
+                .background(Color.appCardBackground)
+                .cornerRadius(8)
+      
+                .disabled(isLoading)
+            if !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundColor(.appError)
+                    .multilineTextAlignment(.center)
+            }
+            Button(action: submitAction) {
+                HStack {
+                    if isLoading {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                            .scaleEffect(0.8)
+                    } else {
+                        Text("Submit Feedback")
+                            .fontWeight(.semibold)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.appSecondary)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+            }
+            .disabled(isLoading || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .opacity(isLoading || message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1.0)
+        }
+        .padding(.vertical, 20)
+        .background(Color.appCardBackground)
+        .cornerRadius(16)
+        .padding(.horizontal, 20)
     }
 }
 

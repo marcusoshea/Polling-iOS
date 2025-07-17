@@ -14,6 +14,8 @@ class AuthenticationManager: ObservableObject {
     @Published var currentUser: User?
     @Published var isLoading = false
     @Published var errorMessage: String?
+    @Published var showRegistrationSuccess = false
+    @Published var registrationSuccessMessage: String? = nil
     
     private let apiService = APIService.shared
     private let keychainService = KeychainService.shared
@@ -61,16 +63,18 @@ class AuthenticationManager: ObservableObject {
         }
     }
     
-    func register(email: String, password: String, firstName: String, lastName: String) async -> Bool {
+    func register(name: String, email: String, password: String, pollingOrderId: Int) async -> Bool {
         isLoading = true
         errorMessage = nil
-        
         do {
-            let _: RegistrationResponse = try await apiService.register(email: email, password: password, firstName: firstName, lastName: lastName)
-            
-            // Auto-login after successful registration
-            return await login(email: email, password: password, pollingOrderId: 0)
-            
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let created = dateFormatter.string(from: Date())
+            let _: RegistrationResponse = try await apiService.register(name: name, email: email, password: password, pollingOrderId: pollingOrderId, pomCreatedAt: created)
+            self.registrationSuccessMessage = "Registration successful: \(name)\n\nYou must be approved by an admin prior to being granted access."
+            self.showRegistrationSuccess = true
+            self.isLoading = false
+            return true
         } catch {
             self.errorMessage = error.localizedDescription
             self.isLoading = false
@@ -101,6 +105,23 @@ class AuthenticationManager: ObservableObject {
         
         do {
             let _: EmptyResponse = try await apiService.resetPassword(token: token, newPassword: newPassword)
+            
+            self.isLoading = false
+            return true
+            
+        } catch {
+            self.errorMessage = error.localizedDescription
+            self.isLoading = false
+            return false
+        }
+    }
+    
+    func changePassword(currentPassword: String, newPassword: String) async -> Bool {
+        isLoading = true
+        errorMessage = nil
+        
+        do {
+            let _: EmptyResponse = try await apiService.changePassword(currentPassword: currentPassword, newPassword: newPassword)
             
             self.isLoading = false
             return true

@@ -64,8 +64,8 @@ class APIService {
         return try await post(endpoint: "/member/login", body: loginRequest)
     }
     
-    func register(email: String, password: String, firstName: String, lastName: String) async throws -> RegistrationResponse {
-        let registrationRequest = RegistrationRequest(email: email, password: password, firstName: firstName, lastName: lastName)
+    func register(name: String, email: String, password: String, pollingOrderId: Int, pomCreatedAt: String) async throws -> RegistrationResponse {
+        let registrationRequest = RegistrationRequest(name: name, email: email, password: password, pollingOrderId: pollingOrderId, pomCreatedAt: pomCreatedAt)
         return try await post(endpoint: "/member/create", body: registrationRequest)
     }
     
@@ -86,7 +86,17 @@ class APIService {
     }
     
     func changePassword(currentPassword: String, newPassword: String) async throws -> EmptyResponse {
-        let body = ["currentPassword": currentPassword, "newPassword": newPassword]
+        // Get current user data from keychain
+        guard let userData = keychainService.getUserData(),
+              let pollingOrderId = userData.pollingOrderId else {
+            throw APIError.unauthorized
+        }
+        let body: [String: String] = [
+            "email": userData.email,
+            "password": currentPassword,
+            "newPassword": newPassword,
+            "pollingOrderId": String(pollingOrderId)
+        ]
         return try await put(endpoint: "/member/changePassword", body: body)
     }
     

@@ -32,15 +32,28 @@ struct LoginRequest: Codable {
 }
 
 struct RegistrationRequest: Codable {
+    let name: String
     let email: String
     let password: String
-    let firstName: String
-    let lastName: String
+    let pollingOrderId: Int
+    let pomCreatedAt: String
+    
+    enum CodingKeys: String, CodingKey {
+        case name
+        case email
+        case password
+        case pollingOrderId = "polling_order_id"
+        case pomCreatedAt = "pom_created_at"
+    }
 }
 
 struct RegistrationResponse: Codable {
-    let message: String
-    let user: User
+    let name: String
+    let email: String
+    let password: String
+    let polling_order_id: Int
+    let pom_created_at: String
+    let polling_order_member_id: Int
 }
 
 struct ResetPasswordRequest: Codable {
