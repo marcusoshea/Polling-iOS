@@ -238,6 +238,23 @@ struct PollingSummary: Codable {
     }
 }
 
+// MARK: - Vote Total (for report totals)
+struct VoteTotal: Codable {
+    let candidateId: Int
+    let pollingOrderId: Int
+    let name: String
+    let vote: String
+    let total: String
+    
+    enum CodingKeys: String, CodingKey {
+        case candidateId = "candidate_id"
+        case pollingOrderId = "polling_order_id"
+        case name
+        case vote
+        case total
+    }
+}
+
 // MARK: - Polling Report Summary
 struct PollingReportSummary: Codable {
     let pollingId: Int

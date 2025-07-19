@@ -118,7 +118,7 @@ struct ReportView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.appText)
                         } else {
-                            Text("This report for the \(report.polling_order_name) for \(report.polling_name) ran from \(formattedStart) to \(formattedEnd)")
+                            Text("\(report.polling_order_name) report for \(report.polling_name) ran from \(formattedStart) to \(formattedEnd)")
                                 .font(.subheadline)
                                 .foregroundColor(.appText)
                         }
@@ -238,6 +238,14 @@ struct ActivityRow: View {
     }
 }
 
+// MARK: - String Extension for Vote Totals
+extension String {
+    func toInt() -> Int {
+        return Int(self) ?? 0
+    }
+}
+
+// MARK: - Report View Model
 @MainActor
 class ReportViewModel: ObservableObject {
     @Published var totalVotes = 0
@@ -255,7 +263,7 @@ class ReportViewModel: ObservableObject {
     @Published var closedAvailable: Bool = false
     @Published var showingInProcess: Bool = false // default to false, will set to true if in-process exists
     @Published var candidateReports: [CandidateReportViewModel] = []
-
+    
     private let apiService = APIService.shared
 
     func loadInitialReportData() async {
@@ -270,31 +278,31 @@ class ReportViewModel: ObservableObject {
         var closedReport: PollingReportResponse? = nil
         var inProcessError: Error? = nil
         var closedError: Error? = nil
-        // Try in-process report first
+        
+        // Always try both report types to determine availability
         print("[ReportViewModel] Requesting in-process report for orderId: \(orderId)")
         do {
             inProcessReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: true)
-            inProcessAvailable = inProcessReport != nil
+            inProcessAvailable = inProcessReport?.report != nil
             print("[ReportViewModel] In-process report available: \(inProcessAvailable)")
         } catch {
-            inProcessAvailable = false
             inProcessError = error
+            inProcessAvailable = false
             print("[ReportViewModel] In-process report error: \(error.localizedDescription)")
         }
-        // If no in-process, try closed report
-        if !inProcessAvailable {
-            print("[ReportViewModel] Requesting closed report for orderId: \(orderId)")
-            do {
-                closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
-                closedAvailable = closedReport != nil
-                print("[ReportViewModel] Closed report available: \(closedAvailable)")
-            } catch {
-                closedAvailable = false
-                closedError = error
-                print("[ReportViewModel] Closed report error: \(error.localizedDescription)")
-            }
+        
+        print("[ReportViewModel] Requesting closed report for orderId: \(orderId)")
+        do {
+            closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
+            closedAvailable = closedReport?.report != nil
+            print("[ReportViewModel] Closed report available: \(closedAvailable)")
+        } catch {
+            closedError = error
+            closedAvailable = false
+            print("[ReportViewModel] Closed report error: \(error.localizedDescription)")
         }
-        // Show whichever is available
+        
+        // Set default state: prefer in-process if available, otherwise use closed
         if inProcessAvailable, let report = inProcessReport {
             showingInProcess = true
             await setReportData(from: report, orderId: orderId, inProcess: true)
@@ -314,30 +322,86 @@ class ReportViewModel: ObservableObject {
         memberParticipation = reportResponse?.memberParticipation ?? ""
         totalVotes = Int(memberParticipation) ?? 0
         candidateCount = Int(activeMembers) ?? 0
+        
         do {
-            // Fetch all candidates for the order
-            let allCandidates = try await apiService.getAllCandidates(orderId: report.polling_order_id)
-            print("📊 [ReportViewModel] Found \(allCandidates.count) total candidates")
-            var candidateVMs: [CandidateReportViewModel] = []
-            for candidate in allCandidates {
-                // Fetch all notes for this candidate
-                let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
-                // Filter notes for this polling
-                let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
+            if inProcess {
+                // For in-process reports, use vote totals to determine candidates
+                print("📊 [ReportViewModel] Fetching vote totals for polling_id: \(report.polling_id)")
+                let voteTotals = try await apiService.getPollingReportTotals(pollingId: report.polling_id)
+                print("📊 [ReportViewModel] Received \(voteTotals.count) vote totals")
                 
-
+                // Group vote totals by candidate name to get unique candidates
+                let candidatesWithVotes = Dictionary(grouping: voteTotals) { $0.name }
+                print("📊 [ReportViewModel] Grouped into \(candidatesWithVotes.count) unique candidates")
                 
-                // Add candidate if they have any notes for this polling (including null notes)
-                if !notesForPolling.isEmpty {
-                    let vm = CandidateReportViewModel(candidate: candidate, pollingNotes: notesForPolling, report: report)
-                    candidateVMs.append(vm)
+                var candidateVMs: [CandidateReportViewModel] = []
+                
+                for (candidateName, voteTotals) in candidatesWithVotes {
+                    print("📊 [ReportViewModel] Processing candidate: \(candidateName) with \(voteTotals.count) vote totals")
+                    // Create a candidate object for this candidate
+                    let candidate = Candidate(
+                        id: voteTotals.first?.candidateId ?? 0,
+                        name: candidateName,
+                        pollingOrderId: report.polling_order_id,
+                        authToken: nil,
+                        watchList: false
+                    )
+                    
+                    // Fetch all notes for this candidate
+                    let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
+                    print("📊 [ReportViewModel] Candidate \(candidate.name) has \(pollingNotes.count) total notes")
+                    // Filter notes for this polling
+                    let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
+                    print("📊 [ReportViewModel] Candidate \(candidate.name) has \(notesForPolling.count) notes for polling_id \(report.polling_id)")
+                    
+                    let candidateVM = CandidateReportViewModel(
+                        candidate: candidate,
+                        notes: notesForPolling,
+                        voteTotals: voteTotals
+                    )
+                    candidateVMs.append(candidateVM)
+                }
+                
+                print("📊 [ReportViewModel] Created \(candidateVMs.count) candidate VMs from vote totals")
+                candidateReports = candidateVMs
+                
+            } else {
+                // For closed reports, parse candidates directly from the report response
+                print("📊 [ReportViewModel] Processing closed report - parsing candidates from report response")
+                
+                // Try to parse candidates from the report response
+                if let reportData = reportResponse?.report {
+                    var candidateVMs: [CandidateReportViewModel] = []
+                    
+                    // Extract candidate information from the report
+                    // This would need to be implemented based on the actual report structure
+                    // For now, let's try to get candidates from the API
+                    let allCandidates = try await apiService.getAllCandidates(orderId: report.polling_order_id)
+                    print("📊 [ReportViewModel] Found \(allCandidates.count) candidates for closed report")
+                    
+                    for candidate in allCandidates {
+                        // Fetch all notes for this candidate
+                        let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
+                        print("📊 [ReportViewModel] Candidate \(candidate.name) has \(pollingNotes.count) total notes")
+                        // Filter notes for this polling
+                        let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
+                        print("📊 [ReportViewModel] Candidate \(candidate.name) has \(notesForPolling.count) notes for polling_id \(report.polling_id)")
+                        
+                        let candidateVM = CandidateReportViewModel(
+                            candidate: candidate,
+                            notes: notesForPolling,
+                            voteTotals: []
+                        )
+                        candidateVMs.append(candidateVM)
+                    }
+                    
+                    print("📊 [ReportViewModel] Created \(candidateVMs.count) candidate VMs from closed report")
+                    candidateReports = candidateVMs
                 }
             }
-            print("📊 [ReportViewModel] Created \(candidateVMs.count) candidate VMs with notes")
-            self.candidateReports = candidateVMs
         } catch {
-            print("Failed to fetch candidates or notes: \(error)")
-            self.candidateReports = []
+            print("Failed to fetch vote totals or notes: \(error)")
+            errorMessage = "Failed to load report data: \(error.localizedDescription)"
         }
     }
 
@@ -363,7 +427,8 @@ struct CandidateReportViewModel: Identifiable {
     let id: Int
     let name: String
     let candidate: Candidate
-    let pollingNotes: [PollingNote]
+    let notes: [PollingNote]
+    let voteTotals: [VoteTotal]
     let recommended: String
     let yesCount: Int
     let noCount: Int
@@ -372,22 +437,31 @@ struct CandidateReportViewModel: Identifiable {
     let percentage: Double
     let hasNotes: Bool
     let showRecommendation: Bool
-    init(candidate: Candidate, pollingNotes: [PollingNote], report: PollingReport) {
+    
+    init(candidate: Candidate, notes: [PollingNote], voteTotals: [VoteTotal]) {
         self.id = candidate.id
         self.name = candidate.name
         self.candidate = candidate
-        // Only include polling notes for the current polling session
-        self.pollingNotes = pollingNotes.filter { $0.pollingId == report.polling_id }
-        // Calculate vote counts
-        self.yesCount = self.pollingNotes.filter { $0.vote == 1 }.count
-        self.noCount = self.pollingNotes.filter { $0.vote == 2 }.count
-        self.waitCount = self.pollingNotes.filter { $0.vote == 3 }.count
-        self.abstainCount = self.pollingNotes.filter { $0.vote == 4 }.count
+        self.notes = notes
+        self.voteTotals = voteTotals
+        
+        // Calculate vote counts from vote totals
+        let yesVotes = voteTotals.filter { $0.vote == "Yes" }
+        let noVotes = voteTotals.filter { $0.vote == "No" }
+        let waitVotes = voteTotals.filter { $0.vote == "Wait" }
+        let abstainVotes = voteTotals.filter { $0.vote == "Abstain" }
+        
+        self.yesCount = yesVotes.first?.total.toInt() ?? 0
+        self.noCount = noVotes.first?.total.toInt() ?? 0
+        self.waitCount = waitVotes.first?.total.toInt() ?? 0
+        self.abstainCount = abstainVotes.first?.total.toInt() ?? 0
+        
         // Percentage calculation: (Yes / (Yes + No + Wait)) * 100, Abstain not included in denominator
         let denominator = yesCount + noCount + waitCount
         self.percentage = denominator > 0 ? (Double(yesCount) / Double(denominator)) * 100.0 : 0.0
-        // Recommendation logic (threshold from report.polling_order_polling_score)
-        let threshold = Double(report.polling_order_polling_score)
+        
+        // Recommendation logic (using a default threshold of 75%)
+        let threshold = 75.0
         if threshold == 0 {
             self.recommended = ""
             self.showRecommendation = false
@@ -398,7 +472,7 @@ struct CandidateReportViewModel: Identifiable {
             self.recommended = "has NOT been recommended to join the order with a rating of:"
             self.showRecommendation = true
         }
-        self.hasNotes = !self.pollingNotes.isEmpty
+        self.hasNotes = !self.notes.isEmpty
     }
 }
 
@@ -421,7 +495,7 @@ struct CandidateReportCard: View {
     let candidateVM: CandidateReportViewModel
     @Binding var notesExpanded: Bool
     var filteredNotes: [PollingNote] {
-        let filtered = candidateVM.pollingNotes.filter { note in
+        let filtered = candidateVM.notes.filter { note in
             if let text = note.note {
                 let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
                 return !trimmed.isEmpty && trimmed.lowercased() != "no note content"
@@ -453,26 +527,24 @@ struct CandidateReportCard: View {
                 .font(.caption)
                 .foregroundColor(.appText.opacity(0.8))
             
-            // Always show notes section for candidates with any notes
-            if !candidateVM.pollingNotes.isEmpty {
-                DisclosureGroup(isExpanded: $notesExpanded) {
-                    if !filteredNotes.isEmpty {
-                        ForEach(filteredNotes, id: \.id) { note in
-                            NoteCard(note: note)
-                        }
-                    } else {
-                        Text("No notes available for this candidate.")
-                            .font(.subheadline)
-                            .foregroundColor(.appText.opacity(0.7))
-                            .padding(.vertical, 8)
+            // Always show notes section for all candidates
+            DisclosureGroup(isExpanded: $notesExpanded) {
+                if !filteredNotes.isEmpty {
+                    ForEach(filteredNotes, id: \.id) { note in
+                        NoteCard(note: note)
                     }
-                } label: {
-                    Text("Notes")
+                } else {
+                    Text("No notes available for this candidate.")
                         .font(.subheadline)
-                        .foregroundColor(.appText)
+                        .foregroundColor(.appText.opacity(0.7))
+                        .padding(.vertical, 8)
                 }
-                .padding(.top, 4)
+            } label: {
+                Text("Notes")
+                    .font(.subheadline)
+                    .foregroundColor(.appText)
             }
+            .padding(.top, 4)
         }
         .padding(16)
         .background(Color.appCardBackground)

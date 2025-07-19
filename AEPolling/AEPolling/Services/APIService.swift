@@ -142,7 +142,7 @@ class APIService {
         return try await get(endpoint: "/polling/pollingreport/\(orderId)/candidates")
     }
     
-    func getPollingReportTotals(pollingId: Int) async throws -> PollingReportSummary {
+    func getPollingReportTotals(pollingId: Int) async throws -> [VoteTotal] {
         return try await get(endpoint: "/pollingnote/totals/\(pollingId)")
     }
     
