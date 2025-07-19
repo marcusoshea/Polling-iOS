@@ -48,7 +48,7 @@ struct Candidate: Codable, Identifiable {
     let name: String
     let pollingOrderId: Int
     let authToken: String?
-    let watchList: Bool?
+    var watchList: Bool?
     
     enum CodingKeys: String, CodingKey {
         case id = "candidate_id"

@@ -234,23 +234,10 @@ class APIService {
     
     private func performRequest<T: Codable>(_ request: URLRequest) async throws -> T {
         do {
-            print("🌐 API Request: \(request.httpMethod ?? "GET") \(request.url?.absoluteString ?? "unknown")")
-            if let headers = request.allHTTPHeaderFields {
-                print("📋 Headers: \(headers)")
-            }
-            
             let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.networkError(NSError(domain: "API", code: -1, userInfo: nil))
-            }
-            
-            print("📡 Response Status: \(httpResponse.statusCode)")
-            print("📄 Response Headers: \(httpResponse.allHeaderFields)")
-            
-            // Print response data for debugging
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📦 Response Data: \(responseString)")
             }
             
             switch httpResponse.statusCode {
@@ -259,33 +246,19 @@ class APIService {
                     let decoder = JSONDecoder()
                     decoder.dateDecodingStrategy = .iso8601
                     let result = try decoder.decode(T.self, from: data)
-                    print("✅ Successfully decoded response as \(T.self)")
                     return result
                 } catch {
-                    print("❌ Decoding error for \(T.self): \(error)")
-                    print("❌ Decoding error details: \(error.localizedDescription)")
-                    
-                    // Try to decode as a different type to see what we're actually getting
-                    if let jsonString = String(data: data, encoding: .utf8) {
-                        print("❌ Raw JSON: \(jsonString)")
-                    }
-                    
                     throw APIError.decodingError
                 }
             case 401:
                 throw APIError.unauthorized
             default:
-                print("❌ Server error: \(httpResponse.statusCode)")
-                if let errorString = String(data: data, encoding: .utf8) {
-                    print("❌ Error response: \(errorString)")
-                }
                 throw APIError.serverError(httpResponse.statusCode)
             }
         } catch {
             if error is APIError {
                 throw error
             } else {
-                print("❌ Network error: \(error)")
                 throw APIError.networkError(error)
             }
         }
@@ -293,30 +266,16 @@ class APIService {
     
     private func performOptionalRequest<T: Codable>(_ request: URLRequest) async throws -> T? {
         do {
-            print("🌐 API Request: \(request.httpMethod ?? "GET") \(request.url?.absoluteString ?? "unknown")")
-            if let headers = request.allHTTPHeaderFields {
-                print("📋 Headers: \(headers)")
-            }
-            
             let (data, response) = try await session.data(for: request)
             
             guard let httpResponse = response as? HTTPURLResponse else {
                 throw APIError.networkError(NSError(domain: "API", code: -1, userInfo: nil))
             }
             
-            print("📡 Response Status: \(httpResponse.statusCode)")
-            print("📄 Response Headers: \(httpResponse.allHeaderFields)")
-            
-            // Print response data for debugging
-            if let responseString = String(data: data, encoding: .utf8) {
-                print("📦 Response Data: \(responseString)")
-            }
-            
             switch httpResponse.statusCode {
             case 200...299:
                 // Check if response is empty
                 if data.isEmpty {
-                    print("✅ Empty response received - no active polling")
                     return nil
                 }
                 
@@ -324,68 +283,102 @@ class APIService {
                     let decoder = JSONDecoder()
                     decoder.dateDecodingStrategy = .iso8601
                     let result = try decoder.decode(T.self, from: data)
-                    print("✅ Successfully decoded response as \(T.self)")
                     return result
                 } catch {
-                    print("❌ Decoding error for \(T.self): \(error)")
-                    print("❌ Decoding error details: \(error.localizedDescription)")
-                    
-                    // Try to decode as a different type to see what we're actually getting
-                    if let jsonString = String(data: data, encoding: .utf8) {
-                        print("❌ Raw JSON: \(jsonString)")
-                    }
-                    
                     throw APIError.decodingError
                 }
             case 401:
                 throw APIError.unauthorized
             default:
-                print("❌ Server error: \(httpResponse.statusCode)")
-                if let errorString = String(data: data, encoding: .utf8) {
-                    print("❌ Error response: \(errorString)")
-                }
                 throw APIError.serverError(httpResponse.statusCode)
             }
         } catch {
             if error is APIError {
                 throw error
             } else {
-                print("❌ Network error: \(error)")
                 throw APIError.networkError(error)
             }
         }
     }
     
     private func get<T: Codable>(endpoint: String, requiresAuth: Bool = true) async throws -> T {
-        var request = URLRequest(url: URL(string: "\(baseURL)\(endpoint)")!)
+        guard let url = URL(string: baseURL + endpoint) else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         if requiresAuth {
-            if let token = keychainService.getAuthToken() {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            } else {
+            guard let token = keychainService.getAuthToken() else {
                 throw APIError.unauthorized
             }
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        return try await performRequest(request)
+        do {
+            let (data, response) = try await session.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.networkError(NSError(domain: "Invalid response", code: -1))
+            }
+            
+            if httpResponse.statusCode == 200 {
+                do {
+                    let decodedResponse = try JSONDecoder().decode(T.self, from: data)
+                    return decodedResponse
+                } catch {
+                    throw APIError.decodingError
+                }
+            } else {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+        } catch {
+            throw APIError.networkError(error)
+        }
     }
     
     private func getOptional<T: Codable>(endpoint: String, requiresAuth: Bool = true) async throws -> T? {
-        var request = URLRequest(url: URL(string: "\(baseURL)\(endpoint)")!)
+        guard let url = URL(string: baseURL + endpoint) else {
+            throw APIError.invalidURL
+        }
+        
+        var request = URLRequest(url: url)
         request.httpMethod = "GET"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
         if requiresAuth {
-            if let token = keychainService.getAuthToken() {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            } else {
+            guard let token = keychainService.getAuthToken() else {
                 throw APIError.unauthorized
             }
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
         
-        return try await performOptionalRequest(request)
+        do {
+            let (data, response) = try await session.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw APIError.networkError(NSError(domain: "Invalid response", code: -1))
+            }
+            
+            if httpResponse.statusCode == 200 {
+                if data.isEmpty {
+                    return nil
+                }
+                
+                do {
+                    let decodedResponse = try JSONDecoder().decode(T.self, from: data)
+                    return decodedResponse
+                } catch {
+                    throw APIError.decodingError
+                }
+            } else {
+                throw APIError.serverError(httpResponse.statusCode)
+            }
+        } catch {
+            throw APIError.networkError(error)
+        }
     }
     
     private func post<T: Codable, U: Codable>(endpoint: String, body: T) async throws -> U {

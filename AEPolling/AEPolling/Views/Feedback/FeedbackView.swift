@@ -15,16 +15,23 @@ struct FeedbackView: View {
     @State private var errorMessage = ""
     
     // Get user info from keychain
-    private var userData: User? {
-        KeychainService.shared.getUserData()
+    private var currentUser: User? {
+        guard let userData = KeychainService.shared.getUserData() else { return nil }
+        return User(
+            id: userData.id,
+            email: userData.email,
+            firstName: userData.name.components(separatedBy: " ").first ?? "",
+            lastName: userData.name.components(separatedBy: " ").dropFirst().joined(separator: " "),
+            pollingOrderId: userData.pollingOrderId
+        )
     }
     
     private var userName: String {
-        userData?.fullName ?? "Unknown User"
+        currentUser?.fullName ?? "Unknown User"
     }
     
     private var userEmail: String {
-        userData?.email ?? "unknown@email.com"
+        currentUser?.email ?? "unknown@email.com"
     }
     
     var body: some View {

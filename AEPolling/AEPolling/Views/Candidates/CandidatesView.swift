@@ -266,10 +266,10 @@ struct CandidateDetailView: View {
                 FullScreenImageView(image: selectedImage)
             }
         }
-        .onChange(of: shouldPresentSheet) { newValue in
-            if !newValue {
-                // Sheet was dismissed, reset the selected image
+        .onChange(of: shouldPresentSheet) { _, _ in
+            if shouldPresentSheet {
                 selectedImage = nil
+                showingFullScreenImage = false
             }
         }
         .onAppear {
@@ -473,12 +473,11 @@ struct CandidateDetailView: View {
                                 }
                             }
                             .onTapGesture {
-                                print("🖼️ Image tapped: \(image.imageUrl)")
                                 selectedImage = image
                                 shouldPresentSheet = true
                             }
                             .onAppear {
-                                print("🖼️ Attempting to load image: \(image.imageUrl)")
+                                // Removed debug print
                             }
                             
                             // Image Description
@@ -667,7 +666,7 @@ struct FullScreenImageView: View {
         }
         .background(Color.black)
         .onAppear {
-            print("🖼️ FullScreen: View appeared for image: \(image.imageUrl)")
+            // Removed debug print
         }
     }
 }

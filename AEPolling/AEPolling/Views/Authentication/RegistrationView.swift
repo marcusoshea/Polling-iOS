@@ -204,7 +204,7 @@ struct RegistrationView: View {
     private func register() {
         guard let selectedOrder = selectedPollingOrder else { return }
         Task {
-            let success = await authManager.register(
+            await authManager.register(
                 name: name,
                 email: email,
                 password: password,

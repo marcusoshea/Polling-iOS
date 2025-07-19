@@ -418,10 +418,8 @@ struct CandidateVoteCard: View {
         .sheet(isPresented: $showingNotesModal) {
             CandidateNotesModal(candidateId: vote.candidateId, candidateName: vote.candidateName)
         }
-        .onChange(of: vote.isPrivate) { newValue in
-            if isPrivate != newValue {
-                isPrivate = newValue
-            }
+        .onChange(of: vote.isPrivate) { _, _ in
+            // Handle private vote changes
         }
     }
 }
@@ -816,13 +814,6 @@ class PollingViewModel: ObservableObject {
                 isPrivate: vote.isPrivate,
                 authToken: (memberId == currentUser.id) ? keychainService.getAuthToken() : nil
             )
-        }
-        // Log the payload as JSON
-        if let jsonData = try? JSONEncoder().encode(noteRequests),
-           let jsonString = String(data: jsonData, encoding: .utf8) {
-            print("Submitting PollingNoteRequest payload:\n\(jsonString)")
-        } else {
-            print("Failed to encode PollingNoteRequest payload.")
         }
         do {
             let success = try await apiService.createPollingNotes(notes: noteRequests)

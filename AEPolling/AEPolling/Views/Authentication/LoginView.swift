@@ -180,19 +180,11 @@ struct LoginView: View {
     }
     
     private func loadPollingOrders() async {
-        isLoadingOrders = true
         do {
             pollingOrders = try await APIService.shared.fetchPollingOrders()
-            print("Successfully loaded \(pollingOrders.count) polling orders")
-            for order in pollingOrders {
-                print("Polling Order: \(order.name) (ID: \(order.id))")
-            }
         } catch {
-            print("Failed to load polling orders: \(error)")
-            print("Error details: \(error.localizedDescription)")
-            // Handle error - could show an alert or message
+            // Handle error silently
         }
-        isLoadingOrders = false
     }
     
     private func signIn() {

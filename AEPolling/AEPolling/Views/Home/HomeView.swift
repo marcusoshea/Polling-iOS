@@ -62,15 +62,10 @@ class HomeViewModel: ObservableObject {
                 let pollingOrders = try await APIService.shared.fetchPollingOrders()
                 if let order = pollingOrders.first(where: { $0.id == pollingOrderId }) {
                     pollingOrderName = order.name
-                    print("Found polling order: \(order.name) for ID: \(pollingOrderId)")
-                } else {
-                    print("No polling order found for ID: \(pollingOrderId)")
                 }
             } catch {
-                print("Error loading polling order: \(error)")
+                // Handle error silently
             }
-        } else {
-            print("No user or polling order ID found")
         }
         
         // Set welcome message after polling order name is loaded

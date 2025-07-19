@@ -25,7 +25,15 @@ class AuthenticationManager: ObservableObject {
         if let token = keychainService.getAuthToken() {
             self.isAuthenticated = true
             // Load user data from keychain
-            if let user = keychainService.getUserData() {
+            if let userData = keychainService.getUserData() {
+                // Convert UserData to User
+                let user = User(
+                    id: userData.id,
+                    email: userData.email,
+                    firstName: userData.name.components(separatedBy: " ").first ?? "",
+                    lastName: userData.name.components(separatedBy: " ").dropFirst().joined(separator: " "),
+                    pollingOrderId: userData.pollingOrderId
+                )
                 self.currentUser = user
             }
             // Validate token with server
@@ -40,8 +48,12 @@ class AuthenticationManager: ObservableObject {
         errorMessage = nil
         
         do {
-            let loginResponse: LoginResponse = try await apiService.login(email: email, password: password, pollingOrderId: pollingOrderId)
-            // Save token if needed: keychainService.saveAuthToken(loginResponse.accessToken)
+            let loginResponse = try await apiService.login(email: email, password: password, pollingOrderId: pollingOrderId)
+            
+            // Save the auth token
+            keychainService.saveAuthToken(loginResponse.accessToken)
+            
+            // Create User object
             let user = User(
                 id: loginResponse.memberId,
                 email: loginResponse.email,
@@ -49,13 +61,21 @@ class AuthenticationManager: ObservableObject {
                 lastName: loginResponse.name.components(separatedBy: " ").dropFirst().joined(separator: " "),
                 pollingOrderId: loginResponse.pollingOrder
             )
-            keychainService.saveUserData(user)
-            keychainService.saveAuthToken(loginResponse.accessToken)
+            
+            // Convert User to UserData for storage
+            let userData = UserData(
+                id: user.id,
+                email: user.email,
+                name: user.fullName,
+                pollingOrderId: user.pollingOrderId,
+                authToken: loginResponse.accessToken
+            )
+            
             self.currentUser = user
+            keychainService.saveUserData(userData)
             self.isAuthenticated = true
             self.isLoading = false
             return true
-        
         } catch {
             self.errorMessage = error.localizedDescription
             self.isLoading = false

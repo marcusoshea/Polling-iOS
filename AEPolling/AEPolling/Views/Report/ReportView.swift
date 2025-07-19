@@ -96,8 +96,10 @@ struct ReportView: View {
                     }
                     .pickerStyle(.segmented)
                     .padding(.horizontal)
-                    .onChange(of: viewModel.showingInProcess) { newValue in
-                        Task { await viewModel.toggleReport(to: newValue) }
+                    .onChange(of: viewModel.showingInProcess) { _, _ in
+                        Task {
+                            await viewModel.toggleReport(to: viewModel.showingInProcess)
+                        }
                     }
                 } else if viewModel.inProcessAvailable {
                     Text("In-Process Report")
@@ -280,26 +282,20 @@ class ReportViewModel: ObservableObject {
         var closedError: Error? = nil
         
         // Always try both report types to determine availability
-        print("[ReportViewModel] Requesting in-process report for orderId: \(orderId)")
         do {
             inProcessReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: true)
             inProcessAvailable = inProcessReport?.report != nil
-            print("[ReportViewModel] In-process report available: \(inProcessAvailable)")
         } catch {
             inProcessError = error
             inProcessAvailable = false
-            print("[ReportViewModel] In-process report error: \(error.localizedDescription)")
         }
         
-        print("[ReportViewModel] Requesting closed report for orderId: \(orderId)")
         do {
             closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
             closedAvailable = closedReport?.report != nil
-            print("[ReportViewModel] Closed report available: \(closedAvailable)")
         } catch {
             closedError = error
             closedAvailable = false
-            print("[ReportViewModel] Closed report error: \(error.localizedDescription)")
         }
         
         // Set default state: prefer in-process if available, otherwise use closed
@@ -310,7 +306,6 @@ class ReportViewModel: ObservableObject {
             showingInProcess = false
             await setReportData(from: report, orderId: orderId, inProcess: false)
         } else {
-            print("[ReportViewModel] No report data available for orderId: \(orderId)")
             errorMessage = inProcessError?.localizedDescription ?? closedError?.localizedDescription ?? "No report data available."
         }
     }
@@ -326,19 +321,14 @@ class ReportViewModel: ObservableObject {
         do {
             if inProcess {
                 // For in-process reports, use vote totals to determine candidates
-                print("📊 [ReportViewModel] Fetching vote totals for polling_id: \(report.polling_id)")
                 let voteTotals = try await apiService.getPollingReportTotals(pollingId: report.polling_id)
-                print("📊 [ReportViewModel] Received \(voteTotals.count) vote totals")
                 
                 // Group vote totals by candidate name to get unique candidates
                 let candidatesWithVotes = Dictionary(grouping: voteTotals) { $0.name }
-                print("📊 [ReportViewModel] Grouped into \(candidatesWithVotes.count) unique candidates")
                 
                 var candidateVMs: [CandidateReportViewModel] = []
                 
                 for (candidateName, voteTotals) in candidatesWithVotes {
-                    print("📊 [ReportViewModel] Processing candidate: \(candidateName) with \(voteTotals.count) vote totals")
-                    // Create a candidate object for this candidate
                     let candidate = Candidate(
                         id: voteTotals.first?.candidateId ?? 0,
                         name: candidateName,
@@ -347,12 +337,9 @@ class ReportViewModel: ObservableObject {
                         watchList: false
                     )
                     
-                    // Fetch all notes for this candidate
+                    // Get polling notes for this candidate
                     let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
-                    print("📊 [ReportViewModel] Candidate \(candidate.name) has \(pollingNotes.count) total notes")
-                    // Filter notes for this polling
                     let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
-                    print("📊 [ReportViewModel] Candidate \(candidate.name) has \(notesForPolling.count) notes for polling_id \(report.polling_id)")
                     
                     let candidateVM = CandidateReportViewModel(
                         candidate: candidate,
@@ -362,46 +349,31 @@ class ReportViewModel: ObservableObject {
                     candidateVMs.append(candidateVM)
                 }
                 
-                print("📊 [ReportViewModel] Created \(candidateVMs.count) candidate VMs from vote totals")
-                candidateReports = candidateVMs
+                self.candidateReports = candidateVMs
                 
             } else {
-                // For closed reports, parse candidates directly from the report response
-                print("📊 [ReportViewModel] Processing closed report - parsing candidates from report response")
+                // For closed reports, get all candidates for the polling order
+                let allCandidates = try await apiService.getAllCandidates(orderId: orderId)
                 
-                // Try to parse candidates from the report response
-                if let reportData = reportResponse?.report {
-                    var candidateVMs: [CandidateReportViewModel] = []
+                var candidateVMs: [CandidateReportViewModel] = []
+                
+                for candidate in allCandidates {
+                    // Get polling notes for this candidate
+                    let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
+                    let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
                     
-                    // Extract candidate information from the report
-                    // This would need to be implemented based on the actual report structure
-                    // For now, let's try to get candidates from the API
-                    let allCandidates = try await apiService.getAllCandidates(orderId: report.polling_order_id)
-                    print("📊 [ReportViewModel] Found \(allCandidates.count) candidates for closed report")
-                    
-                    for candidate in allCandidates {
-                        // Fetch all notes for this candidate
-                        let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
-                        print("📊 [ReportViewModel] Candidate \(candidate.name) has \(pollingNotes.count) total notes")
-                        // Filter notes for this polling
-                        let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
-                        print("📊 [ReportViewModel] Candidate \(candidate.name) has \(notesForPolling.count) notes for polling_id \(report.polling_id)")
-                        
-                        let candidateVM = CandidateReportViewModel(
-                            candidate: candidate,
-                            notes: notesForPolling,
-                            voteTotals: []
-                        )
-                        candidateVMs.append(candidateVM)
-                    }
-                    
-                    print("📊 [ReportViewModel] Created \(candidateVMs.count) candidate VMs from closed report")
-                    candidateReports = candidateVMs
+                    let candidateVM = CandidateReportViewModel(
+                        candidate: candidate,
+                        notes: notesForPolling,
+                        voteTotals: []
+                    )
+                    candidateVMs.append(candidateVM)
                 }
+                
+                self.candidateReports = candidateVMs
             }
         } catch {
-            print("Failed to fetch vote totals or notes: \(error)")
-            errorMessage = "Failed to load report data: \(error.localizedDescription)"
+            // Handle error silently
         }
     }
 

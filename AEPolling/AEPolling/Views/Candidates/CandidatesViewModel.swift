@@ -74,7 +74,6 @@ class CandidatesViewModel: ObservableObject {
             // Convert CandidateImages array to CandidateImage array for UI
             candidateImages = images.map { image in
                 let imageUrl = "https://s3.us-east-2.amazonaws.com/polling.aethelmearc.org/\(image.awsKey)"
-                print("🖼️ Generated image URL: \(imageUrl)")
                 return CandidateImage(
                     id: image.imageId,
                     candidateId: image.candidateId,
@@ -90,8 +89,8 @@ class CandidatesViewModel: ObservableObject {
             showExternalNotes = false
             
             // Expand the most recent poll by default
-            if let mostRecent = polling.first?.pollingName {
-                // This will be handled in the view when it loads
+            if polling.first != nil {
+                // Use polling data
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -134,7 +133,7 @@ class CandidatesViewModel: ObservableObject {
         }()
         
         do {
-            try await apiService.createExternalNote(
+            _ = try await apiService.createExternalNote(
                 candidateId: selectedCandidate.id,
                 note: noteText,
                 pollingOrderMemberId: pollingOrderMemberId,
@@ -163,7 +162,7 @@ class CandidatesViewModel: ObservableObject {
                 errorMessage = "Auth token not found. Please log in again."
                 return
             }
-            try await apiService.removeExternalNote(
+            _ = try await apiService.removeExternalNote(
                 externalNoteId: note.id,
                 pollingOrderMemberId: user.id,
                 authToken: authToken
@@ -190,5 +189,16 @@ class CandidatesViewModel: ObservableObject {
         // This would typically call an API to toggle watchlist status
         // For now, we'll just print a message
         print("Toggle watchlist for candidate: \(candidate.name)")
+    }
+    
+    func toggleWatchlist(for candidate: Candidate) {
+        // Toggle watchlist status
+        if let index = candidates.firstIndex(where: { $0.id == candidate.id }) {
+            candidates[index].watchList = !(candidates[index].watchList ?? false)
+        }
+    }
+    
+    private func generateImageUrl(for candidate: Candidate) -> String {
+        return "https://s3.us-east-2.amazonaws.com/polling.aethelmearc.org/\(candidate.id)_\(Int.random(in: 100000000...999999999)).png"
     }
 } 
