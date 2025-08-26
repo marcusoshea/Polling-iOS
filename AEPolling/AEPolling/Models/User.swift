@@ -65,7 +65,7 @@ struct ResetPassword: Codable {
     let newPassword: String
 }
 
-struct EmptyResponse: Codable {}
+struct EmptyResponse: Codable {} 
 
 struct UserData: Codable {
     let id: Int

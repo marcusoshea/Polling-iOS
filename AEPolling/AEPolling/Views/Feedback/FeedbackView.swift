@@ -106,9 +106,9 @@ struct FeedbackView: View {
             } else {
                 errorMessage = viewModel.errorMessage ?? "Failed to submit feedback. Please try again."
                 showingErrorAlert = true
-            }
         }
     }
+}
 }
 
 private struct FeedbackHeader: View {
@@ -169,22 +169,22 @@ private struct MessageInputCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Your Message")
-                .font(.subheadline)
-                .fontWeight(.medium)
-                .foregroundColor(.appText)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .foregroundColor(.appText)
             TextEditor(text: $message)
                 .frame(minHeight: 150)
                 .padding(12)
                 .background(Color.appCardBackground)
                 .cornerRadius(8)
-      
+                    
                 .disabled(isLoading)
             if !errorMessage.isEmpty {
                 Text(errorMessage)
-                    .font(.caption)
+                        .font(.caption)
                     .foregroundColor(.appError)
                     .multilineTextAlignment(.center)
-            }
+                }
             Button(action: submitAction) {
                 HStack {
                     if isLoading {

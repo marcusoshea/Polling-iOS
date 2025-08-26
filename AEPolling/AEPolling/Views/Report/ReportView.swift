@@ -265,7 +265,7 @@ class ReportViewModel: ObservableObject {
     @Published var closedAvailable: Bool = false
     @Published var showingInProcess: Bool = false // default to false, will set to true if in-process exists
     @Published var candidateReports: [CandidateReportViewModel] = []
-    
+
     private let apiService = APIService.shared
 
     func loadInitialReportData() async {
@@ -290,12 +290,12 @@ class ReportViewModel: ObservableObject {
             inProcessAvailable = false
         }
         
-        do {
-            closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
+            do {
+                closedReport = try await apiService.getPollingReportResponse(orderId: orderId, inProcess: false)
             closedAvailable = closedReport?.report != nil
-        } catch {
+            } catch {
             closedError = error
-            closedAvailable = false
+                closedAvailable = false
         }
         
         // Set default state: prefer in-process if available, otherwise use closed
@@ -319,59 +319,37 @@ class ReportViewModel: ObservableObject {
         candidateCount = Int(activeMembers) ?? 0
         
         do {
-            if inProcess {
-                // For in-process reports, use vote totals to determine candidates
-                let voteTotals = try await apiService.getPollingReportTotals(pollingId: report.polling_id)
+            // For both in-process and closed reports, use vote totals to determine candidates
+            // This ensures we only show candidates that were actually in the polling
+            let voteTotals = try await apiService.getPollingReportTotals(pollingId: report.polling_id)
+            
+            // Group vote totals by candidate name to get unique candidates
+            let candidatesWithVotes = Dictionary(grouping: voteTotals) { $0.name }
+            
+            var candidateVMs: [CandidateReportViewModel] = []
+            
+            for (candidateName, voteTotals) in candidatesWithVotes {
+                let candidate = Candidate(
+                    id: voteTotals.first?.candidateId ?? 0,
+                    name: candidateName,
+                    pollingOrderId: report.polling_order_id,
+                    authToken: nil,
+                    watchList: false
+                )
                 
-                // Group vote totals by candidate name to get unique candidates
-                let candidatesWithVotes = Dictionary(grouping: voteTotals) { $0.name }
+                // Get polling notes for this candidate
+                let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
+                let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
                 
-                var candidateVMs: [CandidateReportViewModel] = []
-                
-                for (candidateName, voteTotals) in candidatesWithVotes {
-                    let candidate = Candidate(
-                        id: voteTotals.first?.candidateId ?? 0,
-                        name: candidateName,
-                        pollingOrderId: report.polling_order_id,
-                        authToken: nil,
-                        watchList: false
-                    )
-                    
-                    // Get polling notes for this candidate
-                    let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
-                    let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
-                    
-                    let candidateVM = CandidateReportViewModel(
-                        candidate: candidate,
-                        notes: notesForPolling,
-                        voteTotals: voteTotals
-                    )
-                    candidateVMs.append(candidateVM)
-                }
-                
-                self.candidateReports = candidateVMs
-                
-            } else {
-                // For closed reports, get all candidates for the polling order
-                let allCandidates = try await apiService.getAllCandidates(orderId: orderId)
-                
-                var candidateVMs: [CandidateReportViewModel] = []
-                
-                for candidate in allCandidates {
-                    // Get polling notes for this candidate
-                    let pollingNotes = try await apiService.getPollingNoteByCandidateId(candidateId: candidate.id)
-                    let notesForPolling = pollingNotes.filter { $0.pollingId == report.polling_id }
-                    
-                    let candidateVM = CandidateReportViewModel(
-                        candidate: candidate,
-                        notes: notesForPolling,
-                        voteTotals: []
-                    )
-                    candidateVMs.append(candidateVM)
-                }
-                
-                self.candidateReports = candidateVMs
+                let candidateVM = CandidateReportViewModel(
+                    candidate: candidate,
+                    notes: notesForPolling,
+                    voteTotals: voteTotals
+                )
+                candidateVMs.append(candidateVM)
             }
+            
+            self.candidateReports = candidateVMs
         } catch {
             // Handle error silently
         }
@@ -434,10 +412,7 @@ struct CandidateReportViewModel: Identifiable {
         
         // Recommendation logic (using a default threshold of 75%)
         let threshold = 75.0
-        if threshold == 0 {
-            self.recommended = ""
-            self.showRecommendation = false
-        } else if percentage >= threshold {
+        if percentage >= threshold {
             self.recommended = "has been recommended to join the order with a rating of:"
             self.showRecommendation = true
         } else {

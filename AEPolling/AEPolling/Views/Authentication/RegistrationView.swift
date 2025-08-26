@@ -19,15 +19,15 @@ struct RegistrationView: View {
     @State private var selectedPollingOrder: PollingOrder? = nil
     @State private var isLoadingOrders = false
     @FocusState private var focusedField: Field?
-
+    
     enum Field {
         case name, email, password
     }
-
+    
     private var isFormValid: Bool {
         !name.isEmpty &&
-        !email.isEmpty &&
-        !password.isEmpty &&
+        !email.isEmpty && 
+        !password.isEmpty && 
         password.count >= 8 &&
         email.contains("@") &&
         selectedPollingOrder != nil
@@ -73,12 +73,12 @@ struct RegistrationView: View {
                     // Registration Form
                     VStack(spacing: 20) {
                         // Name Field
-                        VStack(alignment: .leading, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 8) {
                             Text("Name")
-                                .font(.headline)
-                                .foregroundColor(.primary)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
                             TextField("Enter your name", text: $name)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                                    .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .textContentType(.name)
                                 .focused($focusedField, equals: .name)
                         }
@@ -128,13 +128,13 @@ struct RegistrationView: View {
                         }
                         
                     // Polling Order Dropdown
-                    VStack(alignment: .leading, spacing: 8) {
+                        VStack(alignment: .leading, spacing: 8) {
                         Text("Polling Order")
-                            .font(.headline)
-                            .foregroundColor(.primary)
+                                .font(.headline)
+                                .foregroundColor(.primary)
                         if isLoadingOrders {
                             ProgressView()
-                        } else {
+                                } else {
                             Menu {
                                 ForEach(pollingOrders, id: \ .id) { order in
                                     Button(order.name) {
@@ -152,8 +152,8 @@ struct RegistrationView: View {
                                 .background(Color(.systemGray6))
                                 .cornerRadius(8)
                             }
+                            }
                         }
-                    }
                         
                         if let errorMessage = authManager.errorMessage {
                             Text(errorMessage)

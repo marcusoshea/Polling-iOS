@@ -70,7 +70,7 @@ class HomeViewModel: ObservableObject {
         
         // Set welcome message after polling order name is loaded
         if !pollingOrderName.isEmpty {
-            welcomeMessage = "Welcome to the order of the \(pollingOrderName) polling application!\n\nPlease select what you would like to view from the menu above"
+            welcomeMessage = "Welcome to the order of the \(pollingOrderName) polling application!\n\nPlease select what you would like to view from the menu below"
         } else {
             welcomeMessage = "Welcome to the polling application!\n\nPlease select what you would like to view from the navigation menu below"
         }
