@@ -252,10 +252,10 @@ struct ActivePollingView: View {
                 .cornerRadius(8)
                 .disabled(isSubmitting)
             } else {
-                Button("Submit as Draft") {
-                    submitError = nil
-                    Task { await viewModel.submitVote(completed: false) }
-                }
+                            Button("Submit as Draft") {
+                submitError = nil
+                Task { await viewModel.submitVote(completed: false) }
+            }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
                 .background(Color.appSecondary)
@@ -315,6 +315,7 @@ struct ActivePollingView: View {
                 }
             }
         )
+
         .alert("Success", isPresented: $showSuccessMessage) {
             Button("OK") { }
         } message: {
@@ -793,29 +794,37 @@ class PollingViewModel: ObservableObject {
         defer { isLoading = false }
         guard let currentUser = keychainService.getUserData(), let polling = currentPolling else { return }
         let memberId = selectedMember?.id ?? currentUser.id
-        let noteRequests = candidateVotes.map { vote in
-            PollingNoteRequest(
-                pollingId: polling.id,
-                pollingName: polling.name,
-                startDate: polling.startDate,
-                endDate: polling.endDate,
-                pollingOrderId: polling.pollingOrderId,
-                candidateId: vote.candidateId,
-                pollingCandidateId: vote.pollingNotesId, // Use correct field if available
-                name: vote.candidateName,
-                link: "", // No link in CandidateVote, use empty string
-                watchList: false, // No watchList in CandidateVote, use false
-                pollingNotesId: vote.pollingNotesId,
-                note: vote.note,
-                vote: vote.vote,
-                pnCreatedAt: nil, // Set if available
-                pollingOrderMemberId: memberId,
-                completed: completed, // <-- use parameter
-                isPrivate: vote.isPrivate,
-                authToken: (memberId == currentUser.id) ? keychainService.getAuthToken() : nil
-            )
-        }
+        
         do {
+            let noteRequests = candidateVotes.map { vote in
+                // Send null to trigger INSERT path in backend
+                let finalPollingNotesId: Int? = nil
+                
+                // Use the same polling_candidate_id formula as Android: pollingId + candidateId
+                let androidStylePollingCandidateId = Int("\(polling.id)\(vote.candidateId)") ?? 0
+                
+                return PollingNoteRequest(
+                    pollingId: polling.id,
+                    pollingName: nil,
+                    startDate: nil,
+                    endDate: nil,
+                    pollingOrderId: polling.pollingOrderId,
+                    candidateId: vote.candidateId,
+                    pollingCandidateId: androidStylePollingCandidateId > 0 ? androidStylePollingCandidateId : nil,
+                    name: vote.candidateName,
+                    link: "",
+                    watchList: false,
+                    pollingNotesId: finalPollingNotesId,
+                    note: vote.note.isEmpty ? nil : vote.note,
+                    vote: vote.vote,
+                    pnCreatedAt: ISO8601DateFormatter().string(from: Date()),
+                    pollingOrderMemberId: memberId,
+                    completed: completed,
+                    isPrivate: vote.isPrivate,
+                    authToken: keychainService.getAuthToken()
+                )
+            }
+            
             let success = try await apiService.createPollingNotes(notes: noteRequests)
             if !success { errorMessage = "Failed to submit votes. Please try again." }
         } catch {

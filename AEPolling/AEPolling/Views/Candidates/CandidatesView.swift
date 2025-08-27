@@ -266,8 +266,9 @@ struct CandidateDetailView: View {
                 FullScreenImageView(image: selectedImage)
             }
         }
-        .onChange(of: shouldPresentSheet) { _, _ in
-            if shouldPresentSheet {
+        .onChange(of: shouldPresentSheet) { _, newValue in
+            if !newValue {
+                // Only clear when sheet is dismissed
                 selectedImage = nil
                 showingFullScreenImage = false
             }
@@ -449,13 +450,14 @@ struct CandidateDetailView: View {
                                             .font(.caption)
                                             .foregroundColor(.gray)
                                     }
-                                case .success(let image):
-                                    image
+                                case .success(let thumbnailImage):
+                                    thumbnailImage
                                         .resizable()
                                         .scaledToFill() // Instead of .aspectRatio(contentMode: .fill)
                                         .frame(width: 100, height: 100)
                                         .clipped()
                                         .cornerRadius(8)
+
                                 case .failure:
                                     VStack {
                                         Image(systemName: "photo")
@@ -468,6 +470,7 @@ struct CandidateDetailView: View {
                                             .font(.caption)
                                             .foregroundColor(.gray)
                                     }
+
                                 @unknown default:
                                     EmptyView()
                                 }
@@ -638,24 +641,39 @@ struct FullScreenImageView: View {
                             .font(.subheadline)
                             .foregroundColor(.white.opacity(0.8))
                     }
-                case .success(let image):
-                    image
+                case .success(let loadedImage):
+                    loadedImage
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .padding()
+
                 case .failure(let error):
-                    VStack {
+                    VStack(spacing: 16) {
                         Image(systemName: "photo")
                             .font(.system(size: 60))
-                            .foregroundColor(.gray)
+                            .foregroundColor(.white)
                         Text("Failed to load image")
-                            .font(.subheadline)
-                            .foregroundColor(.gray)
-                        Text(error.localizedDescription)
+                            .font(.headline)
+                            .foregroundColor(.white)
+                        Text("URL: \(image.imageUrl)")
                             .font(.caption)
-                            .foregroundColor(.gray)
-                            .padding(.top, 4)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        Text("Error: \(error.localizedDescription)")
+                            .font(.caption)
+                            .foregroundColor(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                        Button("Retry") {
+                            // Retry functionality could be added here
+                        }
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(Color.white.opacity(0.2))
+                        .cornerRadius(8)
                     }
                 @unknown default:
                     EmptyView()
@@ -665,9 +683,7 @@ struct FullScreenImageView: View {
             Spacer()
         }
         .background(Color.black)
-        .onAppear {
-            // Removed debug print
-        }
+
     }
 }
 

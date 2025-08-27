@@ -71,9 +71,13 @@ class CandidatesViewModel: ObservableObject {
             pollingNotes = polling
             externalNotes = external
             
+
+            
             // Convert CandidateImages array to CandidateImage array for UI
             candidateImages = images.map { image in
-                let imageUrl = "https://s3.us-east-2.amazonaws.com/polling.aethelmearc.org/\(image.awsKey)"
+                // URL encode the awsKey to handle special characters
+                let encodedAwsKey = image.awsKey.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? image.awsKey
+                let imageUrl = "https://s3.us-east-2.amazonaws.com/polling.aethelmearc.org/\(encodedAwsKey)"
                 return CandidateImage(
                     id: image.imageId,
                     candidateId: image.candidateId,

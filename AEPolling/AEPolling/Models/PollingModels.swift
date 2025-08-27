@@ -157,9 +157,9 @@ struct PollingNote: Codable, Identifiable {
 // MARK: - Polling Note Request
 struct PollingNoteRequest: Codable {
     let pollingId: Int
-    let pollingName: String
-    let startDate: String
-    let endDate: String
+    let pollingName: String?
+    let startDate: String?
+    let endDate: String?
     let pollingOrderId: Int
     let candidateId: Int
     let pollingCandidateId: Int?
@@ -170,7 +170,7 @@ struct PollingNoteRequest: Codable {
     let note: String?
     let vote: Int?
     let pnCreatedAt: String?
-    let pollingOrderMemberId: Int?
+    let pollingOrderMemberId: Int
     let completed: Bool
     let isPrivate: Bool
     let authToken: String?
@@ -194,6 +194,34 @@ struct PollingNoteRequest: Codable {
         case completed
         case isPrivate = "private"
         case authToken
+    }
+    
+    // Custom encoding to ensure nil values are included as null
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        
+        try container.encode(pollingId, forKey: .pollingId)
+        try container.encodeIfPresent(pollingName, forKey: .pollingName)
+        try container.encodeIfPresent(startDate, forKey: .startDate)
+        try container.encodeIfPresent(endDate, forKey: .endDate)
+        try container.encode(pollingOrderId, forKey: .pollingOrderId)
+        try container.encode(candidateId, forKey: .candidateId)
+        try container.encodeIfPresent(pollingCandidateId, forKey: .pollingCandidateId)
+        try container.encode(name, forKey: .name)
+        try container.encode(link, forKey: .link)
+        try container.encode(watchList, forKey: .watchList)
+        if let pollingNotesId = pollingNotesId {
+            try container.encode(pollingNotesId, forKey: .pollingNotesId)
+        } else {
+            try container.encodeNil(forKey: .pollingNotesId)
+        }
+        try container.encodeIfPresent(note, forKey: .note)
+        try container.encodeIfPresent(vote, forKey: .vote)
+        try container.encodeIfPresent(pnCreatedAt, forKey: .pnCreatedAt)
+        try container.encode(pollingOrderMemberId, forKey: .pollingOrderMemberId)
+        try container.encode(completed, forKey: .completed)
+        try container.encode(isPrivate, forKey: .isPrivate)
+        try container.encodeIfPresent(authToken, forKey: .authToken)
     }
 }
 
