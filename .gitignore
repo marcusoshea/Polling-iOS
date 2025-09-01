@@ -142,3 +142,12 @@ fastlane/test_output
 .env
 .env.*
 
+AEPolling/AEPolling/Services/KeychainService.swift
+AEPolling/builds/AEPolling.xcarchive/Info.plist
+AEPolling/builds/AppStore/DistributionSummary.plist
+build-production.sh
+PRODUCTION.md
+PRODUCTION_READY.md
+PRODUCTION_SUMMARY.md
+README.md
+AEPolling/builds/AppStore/ExportOptions.plist

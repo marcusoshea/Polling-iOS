@@ -239,7 +239,7 @@ struct ActivePollingView: View {
                     if viewModel.candidateVotes.allSatisfy({ $0.vote != nil }) {
                         submitError = nil
                         Task {
-                            await viewModel.submitVote(completed: true)
+                            await submitVote(completed: true)
                         }
                     } else {
                         submitError = "You must select a vote for every candidate before submitting as completed."
@@ -251,10 +251,11 @@ struct ActivePollingView: View {
                 .foregroundColor(.white)
                 .cornerRadius(8)
                 .disabled(isSubmitting)
+                .opacity(isSubmitting ? 0.6 : 1.0)
             } else {
                             Button("Submit as Draft") {
                 submitError = nil
-                Task { await viewModel.submitVote(completed: false) }
+                Task { await submitVote(completed: false) }
             }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 12)
@@ -262,12 +263,13 @@ struct ActivePollingView: View {
                 .foregroundColor(.white)
                 .cornerRadius(8)
                 .disabled(isSubmitting)
+                .opacity(isSubmitting ? 0.6 : 1.0)
                 Button("Submit Polling Vote") {
                     // Validate all votes are non-nil
                     if viewModel.candidateVotes.allSatisfy({ $0.vote != nil }) {
                         submitError = nil
                         Task {
-                            await viewModel.submitVote(completed: true)
+                            await submitVote(completed: true)
                         }
                     } else {
                         submitError = "You must select a vote for every candidate before submitting as completed."
@@ -279,6 +281,7 @@ struct ActivePollingView: View {
                 .foregroundColor(.white)
                 .cornerRadius(8)
                 .disabled(isSubmitting)
+                .opacity(isSubmitting ? 0.6 : 1.0)
             }
         }
         .padding(.horizontal, 20)
@@ -321,6 +324,34 @@ struct ActivePollingView: View {
         } message: {
             Text("Your votes have been submitted successfully.")
         }
+    }
+    
+    // New function to handle vote submission with proper state management
+    private func submitVote(completed: Bool) async {
+        let startTime = Date()
+        isSubmitting = true
+        submitError = nil
+        
+        do {
+            await viewModel.submitVote(completed: completed)
+            
+            // Check if there was an error
+            if let errorMessage = viewModel.errorMessage {
+                submitError = errorMessage
+            } else {
+                showSuccessMessage = true
+            }
+        }
+        
+        // Ensure minimum display time of 2 seconds for loading state
+        let elapsedTime = Date().timeIntervalSince(startTime)
+        let minimumDisplayTime: TimeInterval = 2.0
+        
+        if elapsedTime < minimumDisplayTime {
+            try? await Task.sleep(nanoseconds: UInt64((minimumDisplayTime - elapsedTime) * 1_000_000_000))
+        }
+        
+        isSubmitting = false
     }
     
     private func formatDate(_ dateString: String) -> String {
@@ -797,8 +828,8 @@ class PollingViewModel: ObservableObject {
         
         do {
             let noteRequests = candidateVotes.map { vote in
-                // Send null to trigger INSERT path in backend
-                let finalPollingNotesId: Int? = nil
+                // Use existing pollingNotesId if available, otherwise nil for new records
+                let finalPollingNotesId = vote.pollingNotesId
                 
                 // Use the same polling_candidate_id formula as Android: pollingId + candidateId
                 let androidStylePollingCandidateId = Int("\(polling.id)\(vote.candidateId)") ?? 0
@@ -826,7 +857,14 @@ class PollingViewModel: ObservableObject {
             }
             
             let success = try await apiService.createPollingNotes(notes: noteRequests)
-            if !success { errorMessage = "Failed to submit votes. Please try again." }
+            if success {
+                errorMessage = nil // Clear any previous errors
+                
+                // After successful submission, reload the data to get the new polling_notes_id values
+                await loadCurrentPollingData()
+            } else {
+                errorMessage = "Failed to submit votes. Please try again."
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
